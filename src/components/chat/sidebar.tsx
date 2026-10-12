@@ -4,7 +4,6 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  MessageSquare,
   UserPlus,
   Settings,
   LogOut,
@@ -14,14 +13,19 @@ import {
   Film,
   FileText,
   Sparkles,
+  Heart,
+  FolderHeart,
+  CalendarHeart,
 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { useChat } from '@/context/chat-context';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { BrandLogo } from '@/components/ui/brand-logo';
 import { InviteModal } from './invite-modal';
 import { formatMessageTime, cn } from '@/lib/utils';
+import { useRomanticFeatures } from '@/lib/romantic-features';
 
 export function Sidebar() {
   const { profile, signOut, isConfigured } = useAuth();
@@ -30,9 +34,11 @@ export function Sidebar() {
     activeConversationId,
     setActiveConversationId,
     friendPresence,
+    setIsMediaDrawerOpen,
   } = useChat();
   const router = useRouter();
 
+  const { daysTogether } = useRomanticFeatures();
   const [isInviteOpen, setIsInviteOpen] = React.useState(false);
   const [filterText, setFilterText] = React.useState('');
 
@@ -51,7 +57,7 @@ export function Sidebar() {
   const getMediaPreviewIcon = (type?: string) => {
     switch (type) {
       case 'image':
-        return <ImageIcon className="w-3.5 h-3.5 text-emerald-500 shrink-0 inline mr-1" />;
+        return <ImageIcon className="w-3.5 h-3.5 text-rose-500 shrink-0 inline mr-1" />;
       case 'audio':
         return <Music className="w-3.5 h-3.5 text-violet-500 shrink-0 inline mr-1" />;
       case 'video':
@@ -65,65 +71,85 @@ export function Sidebar() {
 
   return (
     <>
-      <aside className="w-full md:w-80 lg:w-88 flex flex-col h-full bg-sidebar-bg border-r border-border/80 select-none">
+      <aside className="w-full md:w-80 lg:w-88 flex flex-col h-full bg-sidebar-bg border-r border-border/70 select-none transition-colors">
         {/* Brand Header */}
-        <div className="p-4 border-b border-border/60 flex items-center justify-between">
-          <Link href="/chat" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-xs">
-              <MessageSquare className="w-5 h-5 fill-current" />
-            </div>
-            <div>
-              <span className="font-bold text-base tracking-tight text-foreground flex items-center gap-1.5">
-                DuoChat
-                {!isConfigured && (
-                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                    Preview
-                  </span>
-                )}
-              </span>
-              <p className="text-[10px] text-muted-foreground font-medium">Private 1-on-1 Messenger</p>
-            </div>
-          </Link>
+        <div className="p-4 border-b border-border/50 flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <BrandLogo size="md" />
 
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setIsInviteOpen(true)}
-            className="rounded-xl text-xs gap-1.5 text-primary hover:bg-primary/10 hover:text-primary"
-            title="Invite friend"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span className="hidden sm:inline">Invite</span>
-          </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setIsInviteOpen(true)}
+              className="rounded-xl text-xs gap-1.5 text-primary hover:bg-primary/10 hover:text-primary transition-colors cursor-pointer"
+              title="Invite partner"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline font-medium">Invite</span>
+            </Button>
+          </div>
+
+          {/* Intimate Subtitle Ribbon */}
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground/90 px-0.5">
+            <span className="flex items-center gap-1.5 italic font-serif">
+              <Sparkles className="w-3 h-3 text-primary/70 animate-pulse" />
+              Your little corner of the world
+            </span>
+
+            {daysTogether !== null && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-300 font-medium text-[10px] border border-rose-500/20">
+                <Heart className="w-2.5 h-2.5 fill-current" />
+                Day {daysTogether}
+              </span>
+            )}
+          </div>
         </div>
 
-        {/* Search / Filter Box */}
+        {/* Search Conversations Input */}
         <div className="px-3 pt-3 pb-1">
           <div className="relative flex items-center">
-            <Search className="w-4 h-4 text-muted-foreground absolute left-3 pointer-events-none" />
+            <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 pointer-events-none" />
             <input
               type="text"
               value={filterText}
               onChange={e => setFilterText(e.target.value)}
               placeholder="Search conversations..."
-              className="w-full pl-9 pr-3 py-2 rounded-xl text-xs bg-background/60 border border-input focus:outline-none focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground"
+              className="w-full pl-9 pr-3 py-2 rounded-xl text-xs bg-background/60 border border-input focus:outline-none focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground transition-all"
             />
           </div>
         </div>
 
+        {/* Quick Couple Shortcuts: Our Moments */}
+        <div className="px-3 py-1.5 flex items-center gap-1.5">
+          <button
+            onClick={() => setIsMediaDrawerOpen(true)}
+            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/70 border border-transparent hover:border-border/50 transition-all cursor-pointer"
+            title="Open Our Moments gallery"
+          >
+            <FolderHeart className="w-3.5 h-3.5 text-primary" />
+            <span>Our Moments</span>
+          </button>
+        </div>
+
         {/* Conversations List */}
-        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+        <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
           {filteredConversations.length === 0 ? (
-            <div className="p-6 text-center text-muted-foreground">
-              <p className="text-xs">No conversations yet.</p>
+            <div className="p-6 text-center text-muted-foreground space-y-2">
+              <div className="w-10 h-10 rounded-full bg-primary/10 text-primary mx-auto flex items-center justify-center">
+                <Heart className="w-5 h-5" />
+              </div>
+              <p className="text-xs font-medium text-foreground">No conversations yet</p>
+              <p className="text-[11px] text-muted-foreground max-w-[200px] mx-auto">
+                Invite your favorite person to build your private world together.
+              </p>
               <Button
-                variant="subtle"
+                variant="outline"
                 size="sm"
                 onClick={() => setIsInviteOpen(true)}
-                className="mt-3 text-xs rounded-xl"
+                className="mt-2 text-xs rounded-xl"
               >
                 <UserPlus className="w-3.5 h-3.5 mr-1.5" />
-                Invite your friend
+                Invite Partner
               </Button>
             </div>
           ) : (
@@ -137,28 +163,34 @@ export function Sidebar() {
                   key={conv.id}
                   onClick={() => setActiveConversationId(conv.id)}
                   className={cn(
-                    'flex items-center gap-3 p-3 rounded-2xl cursor-pointer transition-all duration-150',
+                    'flex items-center gap-3 p-3 rounded-2xl cursor-pointer transition-all duration-150 relative group',
                     isActive
-                      ? 'bg-card border border-border shadow-xs text-card-foreground'
-                      : 'hover:bg-muted/60 text-muted-foreground hover:text-foreground'
+                      ? 'bg-card border border-rose-200/60 dark:border-rose-900/40 shadow-xs text-card-foreground'
+                      : 'hover:bg-muted/50 text-muted-foreground hover:text-foreground'
                   )}
                 >
+                  {/* Subtle active left glow line */}
+                  {isActive && (
+                    <div className="absolute left-1.5 top-3 bottom-3 w-1 rounded-full bg-primary" />
+                  )}
+
                   <Avatar
                     src={other?.avatar_path}
-                    name={other?.display_name || 'Friend'}
+                    name={other?.display_name || 'Partner'}
                     size="md"
                     isOnline={isOtherOnline}
+                    className="shrink-0"
                   />
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-0.5">
                       <h4
                         className={cn(
-                          'text-xs font-semibold truncate',
-                          isActive ? 'text-foreground' : 'text-foreground/90'
+                          'text-xs font-semibold truncate flex items-center gap-1',
+                          isActive ? 'text-foreground font-bold' : 'text-foreground/90'
                         )}
                       >
-                        {other?.display_name || 'Direct Chat'}
+                        {other?.display_name || 'My Partner'}
                       </h4>
                       {conv.lastMessage && (
                         <span className="text-[10px] text-muted-foreground shrink-0 font-mono">
@@ -170,12 +202,14 @@ export function Sidebar() {
                     <div className="flex items-center justify-between text-xs">
                       <p className="truncate text-[11px] text-muted-foreground max-w-[170px]">
                         {getMediaPreviewIcon(conv.lastMessage?.message_type)}
-                        {conv.lastMessage?.body ||
-                          conv.lastMessage?.original_filename ||
-                          (conv.lastMessage?.message_type ? `[${conv.lastMessage.message_type}]` : 'Say hello!')}
+                        {conv.lastMessage?.body?.startsWith('[💌 Note]')
+                          ? '💌 Sent a Little Note'
+                          : conv.lastMessage?.body ||
+                            conv.lastMessage?.original_filename ||
+                            (conv.lastMessage?.message_type ? `[${conv.lastMessage.message_type}]` : 'Say hello!')}
                       </p>
                       {conv.unreadCount > 0 && (
-                        <span className="ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-primary text-primary-foreground">
+                        <span className="ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-primary text-primary-foreground shadow-xs">
                           {conv.unreadCount}
                         </span>
                       )}
@@ -188,10 +222,10 @@ export function Sidebar() {
         </div>
 
         {/* User Footer Profile & Controls */}
-        <div className="p-3 border-t border-border/70 bg-card/40 flex items-center justify-between">
+        <div className="p-3 border-t border-border/60 bg-card/40 flex items-center justify-between">
           <Link
             href="/settings/profile"
-            className="flex items-center gap-2.5 min-w-0 p-1.5 rounded-xl hover:bg-muted transition-colors flex-1"
+            className="flex items-center gap-2.5 min-w-0 p-1.5 rounded-xl hover:bg-muted/70 transition-colors flex-1"
           >
             <Avatar
               src={profile?.avatar_path}
@@ -200,10 +234,10 @@ export function Sidebar() {
             />
             <div className="min-w-0 text-left">
               <p className="text-xs font-semibold truncate text-foreground leading-tight">
-                {profile?.display_name || 'My Account'}
+                {profile?.display_name || 'My Profile'}
               </p>
               <p className="text-[10px] text-muted-foreground font-mono truncate">
-                @{profile?.username || 'user'}
+                @{profile?.username || 'me'}
               </p>
             </div>
           </Link>
@@ -213,7 +247,7 @@ export function Sidebar() {
             <Link
               href="/settings/profile"
               className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              title="Settings"
+              title="Settings & Preferences"
               aria-label="Settings"
             >
               <Settings className="w-4 h-4" />

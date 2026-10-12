@@ -12,12 +12,15 @@ import {
   Music,
   FileText,
   AlertCircle,
+  Sparkles,
+  Heart,
 } from 'lucide-react';
 import { useChat } from '@/context/chat-context';
 import { validateFileAttachment } from '@/lib/validations/message';
 import { VoiceRecorderBar } from './voice-recorder-bar';
 import { Button } from '@/components/ui/button';
 import { cn, formatBytes } from '@/lib/utils';
+import { spawnFloatingHearts } from '@/components/ui/floating-hearts';
 
 export function MessageComposer() {
   const {
@@ -28,6 +31,7 @@ export function MessageComposer() {
   } = useChat();
 
   const [text, setText] = React.useState('');
+  const [isLittleNoteMode, setIsLittleNoteMode] = React.useState(false);
   const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
   const [filePreview, setFilePreview] = React.useState<string | null>(null);
   const [fileCategory, setFileCategory] = React.useState<'image' | 'video' | 'audio' | 'document'>('document');
@@ -41,7 +45,7 @@ export function MessageComposer() {
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const typingTimerRef = React.useRef<NodeJS.Timeout | null>(null);
 
-  const QUICK_EMOJIS = ['😊', '😂', '❤️', '🔥', '👍', '🎉', '🙌', '✨', '☕', '🎸'];
+  const QUICK_EMOJIS = ['❤️', '💕', '🥰', '✨', '🌹', '☕', '😂', '🔥', '🎉'];
 
   // Handle typing indicator debounce
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -96,9 +100,18 @@ export function MessageComposer() {
       ? (fileCategory === 'document' ? 'file' : fileCategory)
       : 'text';
 
+    // Format body if Little Note mode is active
+    const finalBody = trimmed
+      ? (isLittleNoteMode ? `[💌 Note] ${trimmed}` : trimmed)
+      : undefined;
+
+    if (isLittleNoteMode || trimmed.includes('❤️') || trimmed.includes('💕')) {
+      spawnFloatingHearts(window.innerWidth / 2, window.innerHeight - 100, 6);
+    }
+
     const res = await sendMessage({
       messageType,
-      body: trimmed || undefined,
+      body: finalBody,
       file: selectedFile || undefined,
       replyToId: replyingTo?.id,
     });
@@ -109,6 +122,7 @@ export function MessageComposer() {
       setErrorMessage(res.error);
     } else {
       setText('');
+      setIsLittleNoteMode(false);
       clearAttachment();
       broadcastTyping(false);
       if (textareaRef.current) {
@@ -144,7 +158,7 @@ export function MessageComposer() {
   }
 
   return (
-    <div className="relative border-t border-border/70 bg-card/60 backdrop-blur-md p-3 sm:p-4">
+    <div className="relative border-t border-border/70 bg-card/75 backdrop-blur-md p-2.5 sm:p-3.5 select-none transition-all">
       {/* Hidden File Input */}
       <input
         type="file"
@@ -166,13 +180,15 @@ export function MessageComposer() {
 
       {/* Quoted Reply Preview */}
       {replyingTo && (
-        <div className="flex items-center justify-between gap-2 mb-2 p-2 px-3 rounded-xl bg-primary/10 border border-primary/20 text-xs">
+        <div className="flex items-center justify-between gap-2 mb-2 p-2 px-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs">
           <div className="min-w-0">
             <span className="font-semibold text-primary">
-              Replying to {replyingTo.sender?.display_name || 'Friend'}:
+              Replying to {replyingTo.sender?.display_name || 'Partner'}:
             </span>
             <p className="truncate text-muted-foreground">
-              {replyingTo.body || replyingTo.original_filename || `[${replyingTo.message_type}]`}
+              {replyingTo.body?.replace(/^\[💌 Note\]\s*/, '') ||
+                replyingTo.original_filename ||
+                `[${replyingTo.message_type}]`}
             </p>
           </div>
           <button
@@ -181,6 +197,21 @@ export function MessageComposer() {
             aria-label="Cancel reply"
           >
             <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Little Note Mode Banner */}
+      {isLittleNoteMode && (
+        <div className="flex items-center justify-between gap-2 mb-2 px-3 py-1.5 rounded-xl bg-amber-500/10 dark:bg-amber-950/30 border border-amber-500/25 text-xs text-amber-700 dark:text-amber-200">
+          <span className="flex items-center gap-1.5 font-serif italic">
+            <span>💌</span> Composing a Little Note for your favorite person
+          </span>
+          <button
+            onClick={() => setIsLittleNoteMode(false)}
+            className="text-[11px] hover:underline font-sans cursor-pointer text-muted-foreground hover:text-foreground"
+          >
+            Normal text
           </button>
         </div>
       )}
@@ -218,7 +249,7 @@ export function MessageComposer() {
       )}
 
       {/* Main Composer Row */}
-      <div className="flex items-end gap-2">
+      <div className="flex items-end gap-1.5 sm:gap-2">
         {/* Attachment menu trigger */}
         <div className="relative">
           <Button
@@ -226,16 +257,16 @@ export function MessageComposer() {
             variant="ghost"
             size="icon"
             onClick={() => setShowAttachMenu(prev => !prev)}
-            className="rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted"
-            title="Attach media or document"
+            className="rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+            title="Attach media or memories"
             aria-label="Attach file"
           >
-            <Paperclip className="w-5 h-5" />
+            <Paperclip className="w-4.5 h-4.5" />
           </Button>
 
           {/* Attachment Type Popover */}
           {showAttachMenu && (
-            <div className="absolute bottom-full mb-2 left-0 w-48 rounded-2xl bg-card border border-border p-1.5 shadow-xl z-30 animate-in zoom-in-95 space-y-0.5">
+            <div className="absolute bottom-full mb-2 left-0 w-52 rounded-2xl bg-card border border-border/80 p-1.5 shadow-xl z-30 animate-in zoom-in-95 space-y-0.5 backdrop-blur-md">
               <button
                 type="button"
                 onClick={() => {
@@ -246,8 +277,8 @@ export function MessageComposer() {
                 }}
                 className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium hover:bg-muted text-foreground transition-colors cursor-pointer"
               >
-                <ImageIcon className="w-4 h-4 text-emerald-500" />
-                Photos & Images
+                <ImageIcon className="w-4 h-4 text-rose-500" />
+                Photos & Memories
               </button>
               <button
                 type="button"
@@ -292,16 +323,48 @@ export function MessageComposer() {
           )}
         </div>
 
+        {/* Little Note Toggle Button */}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={() => setIsLittleNoteMode(prev => !prev)}
+          className={cn(
+            'rounded-xl transition-colors cursor-pointer',
+            isLittleNoteMode
+              ? 'text-amber-500 bg-amber-500/15 hover:bg-amber-500/20'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/70'
+          )}
+          title={isLittleNoteMode ? 'Little Note mode enabled' : 'Send as a Little Note'}
+          aria-label="Toggle Little Note mode"
+        >
+          <span className="text-sm">💌</span>
+        </Button>
+
         {/* Text Input Area */}
-        <div className="flex-1 relative flex items-center bg-background/80 rounded-2xl border border-input shadow-xs focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all">
+        <div
+          className={cn(
+            'flex-1 relative flex items-center bg-background/80 rounded-2xl border shadow-xs transition-all',
+            isLittleNoteMode
+              ? 'border-amber-400/50 bg-amber-50/30 dark:bg-amber-950/20 focus-within:ring-2 focus-within:ring-amber-500/20'
+              : 'border-input focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20'
+          )}
+        >
           <textarea
             ref={textareaRef}
             value={text}
             onChange={handleTextChange}
             onKeyDown={handleKeyDown}
-            placeholder="Type a message... (Enter to send, Shift+Enter for newline)"
+            placeholder={
+              isLittleNoteMode
+                ? 'Write your heartfelt note...'
+                : 'Type a message... (Enter to send, Shift+Enter for newline)'
+            }
             rows={1}
-            className="w-full px-3.5 py-2.5 text-sm bg-transparent border-0 focus:outline-none resize-none max-h-32 placeholder:text-muted-foreground"
+            className={cn(
+              'w-full px-3.5 py-2.5 text-sm bg-transparent border-0 focus:outline-none resize-none max-h-32 placeholder:text-muted-foreground',
+              isLittleNoteMode && 'font-serif italic'
+            )}
           />
 
           {/* Quick Emoji Button */}
@@ -310,14 +373,14 @@ export function MessageComposer() {
               type="button"
               onClick={() => setShowEmojiPicker(prev => !prev)}
               className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-              title="Insert emoji"
+              title="Insert romantic emoji"
               aria-label="Insert emoji"
             >
               <Smile className="w-4 h-4" />
             </button>
 
             {showEmojiPicker && (
-              <div className="absolute bottom-full mb-2 right-0 flex items-center gap-1 p-2 rounded-2xl bg-card border border-border shadow-xl z-30 animate-in zoom-in-95">
+              <div className="absolute bottom-full mb-2 right-0 flex items-center gap-1 p-2 rounded-2xl bg-card border border-border shadow-xl z-30 animate-in zoom-in-95 backdrop-blur-md">
                 {QUICK_EMOJIS.map(emoji => (
                   <button
                     key={emoji}
@@ -326,8 +389,11 @@ export function MessageComposer() {
                       setText(prev => prev + emoji);
                       setShowEmojiPicker(false);
                       textareaRef.current?.focus();
+                      if (emoji === '❤️' || emoji === '💕') {
+                        spawnFloatingHearts(window.innerWidth / 2, window.innerHeight - 100, 4);
+                      }
                     }}
-                    className="p-1 text-base hover:scale-125 transition-transform cursor-pointer"
+                    className="p-1 text-base hover:scale-130 transition-transform cursor-pointer"
                   >
                     {emoji}
                   </button>
@@ -344,7 +410,7 @@ export function MessageComposer() {
             onClick={handleSend}
             isLoading={isSending}
             size="icon"
-            className="rounded-2xl shrink-0 bg-primary text-primary-foreground shadow-sm hover:opacity-90 transition-all"
+            className="rounded-2xl shrink-0 bg-gradient-to-tr from-[#702C45] to-[#C96B83] text-white shadow-sm hover:opacity-95 hover:scale-105 active:scale-95 transition-all cursor-pointer"
             aria-label="Send message"
           >
             <Send className="w-4 h-4" />
@@ -355,7 +421,7 @@ export function MessageComposer() {
             variant="ghost"
             size="icon"
             onClick={() => setIsRecordingVoice(true)}
-            className="rounded-2xl shrink-0 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+            className="rounded-2xl shrink-0 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
             title="Record voice message"
             aria-label="Record voice message"
           >

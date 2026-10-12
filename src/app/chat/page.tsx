@@ -7,9 +7,10 @@ import { ConversationHeader } from '@/components/chat/conversation-header';
 import { MessageList } from '@/components/chat/message-list';
 import { MessageComposer } from '@/components/chat/message-composer';
 import { MediaGalleryDrawer } from '@/components/chat/media-gallery-drawer';
-import { MessageSquare, UserPlus } from 'lucide-react';
+import { UserPlus, Sparkles, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { InviteModal } from '@/components/chat/invite-modal';
+import { BrandLogo } from '@/components/ui/brand-logo';
 
 export default function ChatPage() {
   const { activeConversationId, conversations } = useChat();
@@ -40,21 +41,34 @@ export default function ChatPage() {
           </>
         ) : (
           /* Empty state on desktop when no conversation is selected */
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-muted-foreground select-none">
-            <div className="w-16 h-16 rounded-3xl bg-primary/10 text-primary flex items-center justify-center mb-4 shadow-xs">
-              <MessageSquare className="w-8 h-8" />
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-muted-foreground select-none romantic-wallpaper">
+            <div className="max-w-md space-y-4 animate-in fade-in duration-300">
+              <BrandLogo size="lg" className="justify-center mb-2" />
+
+              <div className="space-y-2">
+                <h3 className="text-2xl font-serif font-bold text-foreground">
+                  Just us, in our own little world.
+                </h3>
+                <p className="text-xs text-muted-foreground leading-relaxed max-w-sm mx-auto">
+                  Your favorite person is just one message away. Select your conversation from the sidebar or send an invitation to connect.
+                </p>
+              </div>
+
+              <div className="pt-2 flex items-center justify-center gap-3">
+                <Button
+                  onClick={() => setIsInviteOpen(true)}
+                  className="rounded-2xl gap-2 font-medium bg-gradient-to-tr from-[#702C45] to-[#C96B83] text-white shadow-md hover:opacity-95 cursor-pointer"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  Invite Partner
+                </Button>
+              </div>
+
+              <div className="pt-4 flex items-center justify-center gap-2 text-[11px] text-muted-foreground/80">
+                <Sparkles className="w-3.5 h-3.5 text-primary" />
+                <span>Made for the moments between us.</span>
+              </div>
             </div>
-            <h3 className="text-lg font-bold text-foreground">Welcome to DuoChat</h3>
-            <p className="text-xs text-muted-foreground max-w-sm mt-1.5 leading-relaxed">
-              Select a conversation from the sidebar or invite your friend to start your private messaging sanctuary.
-            </p>
-            <Button
-              onClick={() => setIsInviteOpen(true)}
-              className="mt-5 rounded-xl gap-2 font-medium"
-            >
-              <UserPlus className="w-4 h-4" />
-              Invite Friend
-            </Button>
           </div>
         )}
       </div>

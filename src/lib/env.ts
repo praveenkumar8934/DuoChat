@@ -1,6 +1,11 @@
+function cleanSupabaseUrl(rawUrl: string): string {
+  if (!rawUrl) return '';
+  return rawUrl.trim().replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '');
+}
+
 export const env = {
-  supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+  supabaseUrl: cleanSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL || ''),
+  supabaseAnonKey: (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').trim(),
   appUrl: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
 };
 

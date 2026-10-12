@@ -2,55 +2,67 @@
 
 import * as React from 'react';
 import { useTheme } from 'next-themes';
-import { Sun, Moon, Laptop, Check } from 'lucide-react';
+import { Sun, Moon, Laptop, Check, Heart, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useRomanticFeatures } from '@/lib/romantic-features';
+import { Button } from '@/components/ui/button';
 
 export default function AppearanceSettingsPage() {
   const { theme, setTheme } = useTheme();
+  const { anniversary, daysTogether, updateAnniversary } = useRomanticFeatures();
   const [mounted, setMounted] = React.useState(false);
+  const [dateInput, setDateInput] = React.useState(anniversary || '');
 
   React.useEffect(() => {
     setMounted(true);
-  }, []);
+    setDateInput(anniversary || '');
+  }, [anniversary]);
 
   if (!mounted) return null;
 
   const themes = [
     {
       id: 'light',
-      label: 'Light Mode',
-      desc: 'Crisp white interface with soft contrasts',
+      label: 'Warm Blush (Light)',
+      desc: 'Soft ivory & blush surfaces with delicate wine accents',
       icon: Sun,
       iconColor: 'text-amber-500',
     },
     {
       id: 'dark',
-      label: 'Dark Mode',
-      desc: 'Deep navy background for nighttime comfort',
+      label: 'Midnight Wine (Dark)',
+      desc: 'Deep luxurious dark background with romantic rose highlights',
       icon: Moon,
-      iconColor: 'text-violet-400',
+      iconColor: 'text-rose-400',
     },
     {
       id: 'system',
       label: 'System Sync',
-      desc: 'Automatically matches your OS preference',
+      desc: 'Automatically matches your device preference',
       icon: Laptop,
       iconColor: 'text-muted-foreground',
     },
   ];
 
+  const handleSaveDate = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateAnniversary(dateInput || null);
+  };
+
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-bold tracking-tight">Appearance & Theme</h2>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Customize the aesthetic and theme of your messaging space
+        <h2 className="text-xl font-serif font-bold tracking-tight text-foreground">
+          Appearance & Our Moments
+        </h2>
+        <p className="text-xs text-muted-foreground mt-0.5 font-sans">
+          Customize the aesthetic and romantic touches of your private sanctuary
         </p>
       </div>
 
       <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-xs space-y-6">
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-foreground">Color Theme</h3>
+          <h3 className="text-sm font-semibold text-foreground">Color Palette</h3>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {themes.map(t => {
@@ -86,22 +98,80 @@ export default function AppearanceSettingsPage() {
           </div>
         </div>
 
+        {/* Our Special Day Milestone Section */}
+        <div className="pt-6 border-t border-border/60 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                <Heart className="w-4 h-4 text-primary fill-primary/20" />
+                <span>Our Day Counter</span>
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Set the date you two started your story to display an anniversary day counter.
+              </p>
+            </div>
+            {daysTogether !== null && (
+              <span className="px-3 py-1 rounded-full text-xs font-medium bg-rose-500/10 text-rose-600 dark:text-rose-300 border border-rose-500/20 font-serif">
+                Day {daysTogether} Together 💕
+              </span>
+            )}
+          </div>
+
+          <form onSubmit={handleSaveDate} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 max-w-md pt-1">
+            <input
+              type="date"
+              value={dateInput}
+              onChange={e => setDateInput(e.target.value)}
+              className="flex-1 px-3 py-2 rounded-xl text-xs bg-background border border-input focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+            <Button type="submit" size="sm" className="rounded-xl text-xs font-medium bg-primary text-primary-foreground">
+              Save Date
+            </Button>
+            {anniversary && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  updateAnniversary(null);
+                  setDateInput('');
+                }}
+                className="rounded-xl text-xs text-destructive hover:bg-destructive/10"
+              >
+                Clear
+              </Button>
+            )}
+          </form>
+        </div>
+
         {/* Live Chat Bubble Preview */}
         <div className="pt-6 border-t border-border/60 space-y-3">
           <h3 className="text-sm font-semibold text-foreground">Message Bubble Aesthetic</h3>
           <p className="text-xs text-muted-foreground">
-            Current typography and rounded corner preview
+            Preview of incoming message, Little Note, and outgoing romantic gradient
           </p>
 
           <div className="p-4 rounded-2xl bg-muted/40 border border-border/50 space-y-3 max-w-md">
             <div className="flex items-start">
               <div className="p-3 rounded-2xl rounded-bl-xs bg-card border border-border text-xs text-card-foreground shadow-xs">
-                Good morning! How is the current theme feeling?
+                Good morning my favorite person! ☕✨
               </div>
             </div>
+
+            <div className="flex items-center justify-center">
+              <div className="p-3.5 rounded-2xl little-note-card shadow-xs text-xs space-y-1">
+                <span className="text-[10px] font-serif italic text-primary font-bold flex items-center gap-1">
+                  <span>💌</span> Little Note
+                </span>
+                <p className="font-serif italic text-xs">
+                  &quot;Every little moment with you is worth remembering.&quot;
+                </p>
+              </div>
+            </div>
+
             <div className="flex items-end justify-end">
-              <div className="p-3 rounded-2xl rounded-br-xs bg-primary text-primary-foreground text-xs shadow-sm">
-                Clean, legible, and easy on the eyes! ✨
+              <div className="p-3 rounded-2xl rounded-br-xs bg-gradient-to-tr from-[#702C45] to-[#C96B83] text-white text-xs shadow-sm">
+                Can&apos;t wait to see you tonight! ❤️
               </div>
             </div>
           </div>

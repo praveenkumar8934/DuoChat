@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Copy, Check, Link as LinkIcon, Shield, Clock, Trash2, UserPlus } from 'lucide-react';
+import { Copy, Check, Link as LinkIcon, Shield, Clock, Trash2, Heart, Sparkles } from 'lucide-react';
 import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { generateSecureToken, hashToken } from '@/lib/utils';
@@ -106,15 +106,15 @@ export function InviteModal({ isOpen, onClose }: InviteModalProps) {
       isOpen={isOpen}
       onClose={onClose}
       size="md"
-      title="Invite a Friend"
-      description="Create a single-use private invitation link for your friend to connect."
+      title="Invite Your Partner"
+      description="Create a single-use private invitation link to welcome your favorite person into your world."
     >
       <div className="space-y-4 pt-1">
         {/* Notice */}
-        <div className="flex items-start gap-3 p-3 rounded-xl bg-primary/10 border border-primary/20 text-xs">
-          <Shield className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+        <div className="flex items-start gap-3 p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-xs">
+          <Heart className="w-4 h-4 text-primary shrink-0 mt-0.5 fill-primary/30" />
           <p className="text-muted-foreground leading-relaxed">
-            Invitations are cryptographically single-use. Once your friend accepts, a private one-to-one conversation will be created and the link will expire.
+            Invitations are strictly single-use and private. Once your partner accepts, an intimate direct space is created just for the two of you.
           </p>
         </div>
 
@@ -140,20 +140,21 @@ export function InviteModal({ isOpen, onClose }: InviteModalProps) {
         {/* Link Output or Generate Button */}
         {generatedUrl ? (
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-foreground">
-              Your Invitation Link
+            <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+              <span>Your Private Invitation Link</span>
+              <Sparkles className="w-3.5 h-3.5 text-primary" />
             </label>
-            <div className="flex items-center gap-2 p-2 rounded-xl bg-muted border border-border">
+            <div className="flex items-center gap-2 p-2 rounded-2xl bg-muted/80 border border-border">
               <input
                 type="text"
                 readOnly
                 value={generatedUrl}
-                className="w-full bg-transparent text-xs font-mono focus:outline-none truncate select-all"
+                className="w-full bg-transparent text-xs font-mono focus:outline-none truncate select-all px-2"
               />
               <Button
                 size="sm"
                 onClick={copyToClipboard}
-                className="shrink-0 gap-1 rounded-lg text-xs font-medium"
+                className="shrink-0 gap-1 rounded-xl text-xs font-medium bg-primary text-primary-foreground"
               >
                 {copied ? (
                   <>
@@ -169,17 +170,17 @@ export function InviteModal({ isOpen, onClose }: InviteModalProps) {
               </Button>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Send this link securely to your friend via email, SMS, or any channel.
+              Send this link to your partner via SMS, WhatsApp, or email.
             </p>
           </div>
         ) : (
           <Button
             onClick={handleGenerateLink}
             isLoading={isLoading}
-            className="w-full rounded-xl gap-2 font-medium"
+            className="w-full rounded-2xl gap-2 font-medium bg-gradient-to-tr from-[#702C45] to-[#C96B83] text-white shadow-md hover:opacity-95"
           >
-            <UserPlus className="w-4 h-4" />
-            Generate Single-Use Link
+            <Heart className="w-4 h-4 fill-current" />
+            Generate Private Invitation
           </Button>
         )}
 
@@ -187,13 +188,13 @@ export function InviteModal({ isOpen, onClose }: InviteModalProps) {
         {myInvites.length > 0 && (
           <div className="pt-3 border-t border-border/50">
             <h5 className="text-xs font-semibold text-foreground mb-2">
-              Active Unclaimed Invites ({myInvites.length})
+              Pending Invitations ({myInvites.length})
             </h5>
             <div className="space-y-2 max-h-36 overflow-y-auto">
               {myInvites.map(inv => (
                 <div
                   key={inv.id}
-                  className="flex items-center justify-between p-2 rounded-xl bg-muted/50 border border-border/40 text-xs"
+                  className="flex items-center justify-between p-2.5 rounded-xl bg-muted/40 border border-border/40 text-xs"
                 >
                   <div className="flex items-center gap-2 truncate">
                     <LinkIcon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />

@@ -5,14 +5,14 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { MessageSquare, Mail, Lock, Eye, EyeOff, Sparkles, ArrowRight } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Sparkles, ArrowRight, Heart } from 'lucide-react';
 import { loginSchema, LoginFormData } from '@/lib/validations/auth';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
-import { isSupabaseConfigured } from '@/lib/env';
 import { useAuth } from '@/context/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { BrandLogo } from '@/components/ui/brand-logo';
 
 function LoginForm() {
   const router = useRouter();
@@ -42,7 +42,6 @@ function LoginForm() {
     setAuthError(null);
 
     if (!isConfigured) {
-      // In preview/demo mode, transition directly to chat
       setTimeout(() => {
         setIsLoading(false);
         router.push(redirectTo);
@@ -75,37 +74,37 @@ function LoginForm() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-background text-foreground">
+    <div className="min-h-screen flex flex-col bg-background text-foreground selection:bg-rose-500/20">
       {/* Top Bar */}
       <header className="p-4 flex items-center justify-between border-b border-border/40">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-primary text-primary-foreground flex items-center justify-center">
-            <MessageSquare className="w-4 h-4 fill-current" />
-          </div>
-          <span className="font-bold text-base">DuoChat</span>
-        </Link>
+        <BrandLogo size="md" href="/" />
         <ThemeToggle />
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 flex items-center justify-center p-4 sm:p-6">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 relative overflow-hidden">
+        {/* Soft Ambient Glow */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[350px] bg-rose-500/10 dark:bg-rose-950/20 blur-[120px] rounded-full pointer-events-none -z-10" />
+
         <div className="w-full max-w-md space-y-6">
-          <div className="text-center space-y-1.5">
-            <h1 className="text-2xl font-bold tracking-tight">Welcome back</h1>
-            <p className="text-xs text-muted-foreground">
+          <div className="text-center space-y-2">
+            <h1 className="text-3xl font-serif font-bold tracking-tight text-foreground">
+              Welcome back
+            </h1>
+            <p className="text-xs text-muted-foreground font-sans">
               Sign in to your private conversation space
             </p>
           </div>
 
-          <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-xl space-y-5">
+          <div className="p-6 sm:p-7 rounded-3xl bg-card/90 border border-border/80 shadow-2xl space-y-5 backdrop-blur-md">
             {authError && (
-              <div className="p-3 rounded-xl bg-destructive/10 text-destructive text-xs border border-destructive/20">
+              <div className="p-3 rounded-2xl bg-destructive/10 text-destructive text-xs border border-destructive/20">
                 {authError}
               </div>
             )}
 
             {!isConfigured && (
-              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-300 flex items-start justify-between gap-2">
+              <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-700 dark:text-rose-300 flex items-start justify-between gap-2">
                 <div>
                   <p className="font-semibold flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5" />
@@ -118,7 +117,7 @@ function LoginForm() {
                 <button
                   type="button"
                   onClick={fillDemoAccount}
-                  className="shrink-0 text-[11px] underline font-medium hover:opacity-80"
+                  className="shrink-0 text-[11px] underline font-medium hover:opacity-80 cursor-pointer"
                 >
                   Fill Demo
                 </button>
@@ -133,8 +132,9 @@ function LoginForm() {
                 <Input
                   type="email"
                   placeholder="name@example.com"
-                  leftIcon={<Mail className="w-4 h-4" />}
+                  leftIcon={<Mail className="w-4 h-4 text-muted-foreground" />}
                   error={errors.email?.message}
+                  className="rounded-xl"
                   {...register('email')}
                 />
               </div>
@@ -146,7 +146,7 @@ function LoginForm() {
                   </label>
                   <Link
                     href="/forgot-password"
-                    className="text-xs text-primary hover:underline"
+                    className="text-xs text-primary hover:underline font-medium"
                   >
                     Forgot password?
                   </Link>
@@ -154,7 +154,7 @@ function LoginForm() {
                 <Input
                   type={showPassword ? 'text' : 'password'}
                   placeholder="Enter your password"
-                  leftIcon={<Lock className="w-4 h-4" />}
+                  leftIcon={<Lock className="w-4 h-4 text-muted-foreground" />}
                   rightIcon={
                     <button
                       type="button"
@@ -166,6 +166,7 @@ function LoginForm() {
                     </button>
                   }
                   error={errors.password?.message}
+                  className="rounded-xl"
                   {...register('password')}
                 />
               </div>
@@ -173,17 +174,17 @@ function LoginForm() {
               <Button
                 type="submit"
                 isLoading={isLoading}
-                className="w-full rounded-xl font-medium shadow-sm mt-2"
+                className="w-full rounded-2xl font-semibold shadow-md mt-3 bg-gradient-to-tr from-[#702C45] to-[#C96B83] text-white hover:opacity-95 cursor-pointer"
               >
-                Sign In
+                Sign In to Our Space
                 <ArrowRight className="w-4 h-4 ml-1.5" />
               </Button>
             </form>
 
             <div className="text-center pt-2 border-t border-border/50 text-xs text-muted-foreground">
-              Don&apos;t have an account?{' '}
+              Don&apos;t have an account yet?{' '}
               <Link href="/signup" className="font-semibold text-primary hover:underline">
-                Create one
+                Create one together
               </Link>
             </div>
           </div>

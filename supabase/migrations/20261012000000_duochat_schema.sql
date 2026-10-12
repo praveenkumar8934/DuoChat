@@ -254,17 +254,29 @@ CREATE POLICY "Users can update their own profile"
   USING (id = auth.uid())
   WITH CHECK (id = auth.uid());
 
+-- Helper function to check conversation membership without RLS recursion
+CREATE OR REPLACE FUNCTION public.is_conversation_member(conv_id UUID, usr_id UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.conversation_members
+    WHERE conversation_id = conv_id AND user_id = usr_id
+  );
+END;
+$$;
+
 -- 2. CONVERSATIONS POLICIES
 DROP POLICY IF EXISTS "Users can view conversations they belong to" ON public.conversations;
 CREATE POLICY "Users can view conversations they belong to"
   ON public.conversations FOR SELECT
   TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM public.conversation_members
-      WHERE conversation_id = conversations.id
-        AND user_id = auth.uid()
-    )
+    public.is_conversation_member(id, auth.uid())
   );
 
 -- 3. CONVERSATION MEMBERS POLICIES
@@ -273,11 +285,7 @@ CREATE POLICY "Users can view members of their conversations"
   ON public.conversation_members FOR SELECT
   TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM public.conversation_members cm
-      WHERE cm.conversation_id = conversation_members.conversation_id
-        AND cm.user_id = auth.uid()
-    )
+    user_id = auth.uid() OR public.is_conversation_member(conversation_id, auth.uid())
   );
 
 DROP POLICY IF EXISTS "Users can update their own membership row" ON public.conversation_members;
@@ -293,11 +301,7 @@ CREATE POLICY "Users can view messages in their conversations"
   ON public.messages FOR SELECT
   TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM public.conversation_members
-      WHERE conversation_id = messages.conversation_id
-        AND user_id = auth.uid()
-    )
+    public.is_conversation_member(conversation_id, auth.uid())
   );
 
 DROP POLICY IF EXISTS "Authorized members can send messages" ON public.messages;
@@ -306,11 +310,7 @@ CREATE POLICY "Authorized members can send messages"
   TO authenticated
   WITH CHECK (
     sender_id = auth.uid()
-    AND EXISTS (
-      SELECT 1 FROM public.conversation_members
-      WHERE conversation_id = messages.conversation_id
-        AND user_id = auth.uid()
-    )
+    AND public.is_conversation_member(conversation_id, auth.uid())
   );
 
 DROP POLICY IF EXISTS "Senders can edit their own messages" ON public.messages;

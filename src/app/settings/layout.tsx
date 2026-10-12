@@ -3,8 +3,9 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ArrowLeft, User, Palette, Shield, MessageSquare } from 'lucide-react';
+import { ArrowLeft, User, Palette, Shield } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { BrandLogo } from '@/components/ui/brand-logo';
 import { cn } from '@/lib/utils';
 
 export default function SettingsLayout({
@@ -33,12 +34,10 @@ export default function SettingsLayout({
             >
               <ArrowLeft className="w-5 h-5" />
             </Link>
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-primary text-primary-foreground flex items-center justify-center">
-                <MessageSquare className="w-4 h-4 fill-current" />
-              </div>
-              <h1 className="text-base font-bold">Settings</h1>
-            </div>
+            <BrandLogo size="sm" href="/chat" />
+            <span className="text-xs text-muted-foreground/80 font-serif italic border-l border-border/60 pl-2 ml-1 hidden sm:inline">
+              Settings & Preferences
+            </span>
           </div>
 
           <ThemeToggle />
@@ -50,7 +49,7 @@ export default function SettingsLayout({
         <div className="flex flex-col md:flex-row gap-6 md:gap-8">
           {/* Settings Sub-Navigation */}
           <aside className="w-full md:w-56 shrink-0">
-            <nav className="flex md:flex-col gap-1.5 p-1 rounded-2xl bg-muted/50 border border-border/50">
+            <nav className="flex md:flex-col gap-1.5 p-1 rounded-2xl bg-muted/40 border border-border/50">
               {navItems.map(item => {
                 const Icon = item.icon;
                 const isActive = pathname === item.href;
@@ -61,7 +60,7 @@ export default function SettingsLayout({
                     className={cn(
                       'flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all',
                       isActive
-                        ? 'bg-card text-foreground shadow-xs font-semibold'
+                        ? 'bg-card text-foreground shadow-xs font-semibold border border-rose-500/20'
                         : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
                     )}
                   >
