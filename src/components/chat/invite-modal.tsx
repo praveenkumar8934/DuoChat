@@ -103,11 +103,14 @@ export function InviteModal({ isOpen, onClose, defaultTab = 'duoid' }: InviteMod
 
     if (!res.success) {
       setConnectError(res.error || 'Could not connect with this user');
+    } else if (res.isRequestSent) {
+      setConnectSuccess(res.message || 'Connection request sent! Once they accept, they will appear in your friend list.');
+      setTargetIdentifier('');
     } else {
-      setConnectSuccess('Connected successfully! Opening conversation...');
+      setConnectSuccess(res.message || 'Connected successfully! Opening conversation...');
       setTimeout(() => {
         onClose();
-      }, 900);
+      }, 1000);
     }
   };
 
@@ -286,7 +289,7 @@ export function InviteModal({ isOpen, onClose, defaultTab = 'duoid' }: InviteMod
                 className="w-full rounded-2xl gap-2 font-medium bg-gradient-to-tr from-[#702C45] to-[#C96B83] text-white shadow-md hover:opacity-95 cursor-pointer"
               >
                 <UserCheck className="w-4 h-4" />
-                Connect &amp; Start Chatting
+                Send Connection Request
               </Button>
             </form>
           </div>

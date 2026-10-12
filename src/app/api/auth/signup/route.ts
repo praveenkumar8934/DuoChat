@@ -15,7 +15,8 @@ export async function POST(req: Request) {
     if (!rateLimit.success) {
       return NextResponse.json(
         {
-          error: 'Rate limit exceeded. Maximum 100 signups per second allowed.',
+          error: 'rate_limited',
+          message: 'Rate limit exceeded. Maximum 100 signups per second allowed.',
           retryAfter: Math.ceil(rateLimit.resetMs / 1000),
         },
         {
@@ -35,7 +36,7 @@ export async function POST(req: Request) {
 
     if (!email || !password || !displayName || !username) {
       return NextResponse.json(
-        { error: 'All fields (email, password, displayName, username) are required' },
+        { error: 'missing_fields', message: 'All fields (email, password, displayName, username) are required' },
         { status: 400 }
       );
     }
@@ -47,7 +48,7 @@ export async function POST(req: Request) {
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!serviceKey || !env.supabaseUrl) {
       return NextResponse.json(
-        { error: 'Server configuration missing. Check SUPABASE_SERVICE_ROLE_KEY.' },
+        { error: 'server_config', message: 'Server configuration missing. Check SUPABASE_SERVICE_ROLE_KEY.' },
         { status: 500 }
       );
     }
@@ -56,7 +57,65 @@ export async function POST(req: Request) {
       auth: { persistSession: false },
     });
 
-    // Create user via admin API with email_confirm: true to bypass email rate limits
+    // 2. Check if email is already present in database (auth.users)
+    const { data: usersData, error: listError } = await adminClient.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    });
+
+    if (listError) {
+      console.error('Error listing users for duplicate check:', listError);
+    }
+
+    const emailExists = Boolean(
+      usersData?.users?.some((u) => (u.email || '').toLowerCase() === cleanEmail)
+    );
+
+    // 3. Check if username is already present in database (public.profiles)
+    const { data: profileWithUsername, error: profileErr } = await adminClient
+      .from('profiles')
+      .select('id, username')
+      .ilike('username', cleanUsername)
+      .maybeSingle();
+
+    if (profileErr && profileErr.code !== 'PGRST116') {
+      console.error('Error checking username in profiles:', profileErr);
+    }
+
+    const usernameExists = Boolean(profileWithUsername);
+
+    // 4. Strict matching and explicit error messaging
+    if (emailExists && usernameExists) {
+      return NextResponse.json(
+        {
+          error: 'both_exist',
+          message: 'Both this email and username already exist. Please choose different credentials or sign in.',
+        },
+        { status: 400 }
+      );
+    }
+
+    if (emailExists) {
+      return NextResponse.json(
+        {
+          error: 'email_exists',
+          message: 'An account with this email already exists. Please sign in instead.',
+        },
+        { status: 400 }
+      );
+    }
+
+    if (usernameExists) {
+      return NextResponse.json(
+        {
+          error: 'username_exists',
+          message: 'This username is already taken. Please choose another username.',
+        },
+        { status: 400 }
+      );
+    }
+
+    // 5. Neither exists: create account directly with email_confirm: true (NO confirmation email sent!)
     const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
       email: cleanEmail,
       password,
@@ -68,7 +127,10 @@ export async function POST(req: Request) {
     });
 
     if (createError) {
-      return NextResponse.json({ error: createError.message }, { status: 400 });
+      return NextResponse.json(
+        { error: 'create_failed', message: createError.message },
+        { status: 400 }
+      );
     }
 
     return NextResponse.json(
@@ -77,6 +139,8 @@ export async function POST(req: Request) {
         user: {
           id: newUser.user?.id,
           email: newUser.user?.email,
+          username: cleanUsername,
+          displayName: cleanDisplayName,
         },
       },
       {
@@ -89,7 +153,7 @@ export async function POST(req: Request) {
   } catch (err: any) {
     console.error('Error in signup route:', err);
     return NextResponse.json(
-      { error: err?.message || 'Internal server error' },
+      { error: 'server_error', message: err?.message || 'Internal server error' },
       { status: 500 }
     );
   }

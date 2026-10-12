@@ -67,90 +67,50 @@ function SignupForm() {
     try {
       const cleanEmail = data.email.trim();
 
-      // 1. Server-side registration (supports 100 signups/sec and bypasses Supabase email rate limits)
-      let serverCreated = false;
-      try {
-        const res = await fetch('/api/auth/signup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: cleanEmail,
-            password: data.password,
-            displayName: data.displayName.trim(),
-            username: data.username.toLowerCase().trim(),
-          }),
-        });
-
-        const resData = await res.json();
-        if (res.ok && resData.success) {
-          serverCreated = true;
-        } else if (resData.error) {
-          const lowerMsg = (resData.error || '').toLowerCase();
-          if (
-            lowerMsg.includes('already registered') ||
-            lowerMsg.includes('already in use') ||
-            lowerMsg.includes('already exists')
-          ) {
-            setIsAlreadyRegistered(true);
-            setAuthError('An account with this email already exists. Please sign in instead.');
-            setIsLoading(false);
-            return;
-          } else if (res.status === 429) {
-            setAuthError(resData.error || 'Rate limit exceeded (100 req/sec max). Please slow down.');
-            setIsLoading(false);
-            return;
-          }
-        }
-      } catch {
-        // Fallback to client-side signUp if network interrupted
-      }
-
-      const supabase = getSupabaseBrowserClient();
-
-      if (serverCreated) {
-        // Automatically sign in now that account is confirmed
-        const { error: signInError } = await supabase.auth.signInWithPassword({
+      // 1. Server-side registration (verifies email & username existence, bypasses confirmation emails, auto-confirms)
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           email: cleanEmail,
           password: data.password,
-        });
+          displayName: data.displayName.trim(),
+          username: data.username.toLowerCase().trim(),
+        }),
+      });
 
-        if (!signInError) {
-          router.push('/chat');
-          return;
+      const resData = await res.json();
+
+      if (!res.ok || !resData.success) {
+        const errorType = resData.error;
+        const msg = resData.message || resData.error || 'Registration failed';
+
+        if (errorType === 'both_exist' || errorType === 'email_exists') {
+          setIsAlreadyRegistered(true);
+        } else {
+          setIsAlreadyRegistered(false);
         }
 
-        setSignupSuccess(true);
+        setAuthError(msg);
         setIsLoading(false);
         return;
       }
 
-      // 2. Client-side fallback if server-side signup was bypassed
-      const { data: authData, error } = await supabase.auth.signUp({
+      // 2. Account successfully created & auto-confirmed: log in directly
+      const supabase = getSupabaseBrowserClient();
+      const { error: signInError } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password: data.password,
-        options: {
-          data: {
-            display_name: data.displayName.trim(),
-            username: data.username.toLowerCase().trim(),
-          },
-        },
       });
 
-      if (error) {
-        const lowerMsg = (error.message || '').toLowerCase();
-        if (lowerMsg.includes('already registered') || lowerMsg.includes('already in use')) {
-          setIsAlreadyRegistered(true);
-          setAuthError('An account with this email already exists. Please sign in instead.');
-        } else {
-          setAuthError(error.message);
-        }
-        setIsLoading(false);
-      } else if (authData.session) {
+      if (!signInError) {
         router.push('/chat');
-      } else {
-        setSignupSuccess(true);
-        setIsLoading(false);
+        return;
       }
+
+      // If session couldn't auto-start, show quick sign-in link
+      setSignupSuccess(true);
+      setIsLoading(false);
     } catch (err: unknown) {
       setAuthError((err as Error)?.message || 'Sign up failed. Please try again.');
       setIsLoading(false);

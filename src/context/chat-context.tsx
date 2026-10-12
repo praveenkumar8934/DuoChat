@@ -42,7 +42,26 @@ export interface ChatContextType {
   broadcastTyping: (isTyping: boolean) => void;
   markConversationAsRead: (conversationId: string) => Promise<void>;
   refreshConversations: () => Promise<void>;
-  connectWithPartner: (identifier: string) => Promise<{ success: boolean; conversationId?: string; error?: string }>;
+  incomingRequests: ConnectionRequestItem[];
+  refreshRequests: () => Promise<void>;
+  respondToRequest: (
+    requestId: string,
+    action: 'accept' | 'decline'
+  ) => Promise<{ success: boolean; conversationId?: string; error?: string; message?: string }>;
+  connectWithPartner: (
+    identifier: string
+  ) => Promise<{ success: boolean; conversationId?: string; isRequestSent?: boolean; message?: string; error?: string }>;
+}
+
+export interface ConnectionRequestItem {
+  id: string;
+  createdAt: string;
+  sender: {
+    id: string;
+    display_name: string;
+    username?: string;
+    avatar_path?: string | null;
+  };
 }
 
 const ChatContext = createContext<ChatContextType | null>(null);
@@ -58,6 +77,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [isSearching, setIsSearching] = useState(false);
   const [isMediaDrawerOpen, setIsMediaDrawerOpen] = useState(false);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [incomingRequests, setIncomingRequests] = useState<ConnectionRequestItem[]>([]);
   const [friendPresence, setFriendPresence] = useState<UserPresence>({
     userId: '',
     online: false,
@@ -87,11 +107,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
   }, [activeConversation]);
 
-  // Connect with a partner via Duo ID or username
+  // Connect with a partner via Duo ID or username (sends connection request)
   const connectWithPartner = useCallback(
     async (identifier: string) => {
       try {
-        const res = await fetch('/api/connect', {
+        const res = await fetch('/api/connect/request', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ identifier }),
@@ -101,11 +121,23 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           return { success: false, error: data.error || 'Failed to connect' };
         }
 
-        await refreshConversations();
-        if (data.conversationId) {
+        if (data.alreadyConnected && data.conversationId) {
+          await refreshConversations();
           setActiveConversationId(data.conversationId);
+          return { success: true, conversationId: data.conversationId, message: data.message };
         }
-        return { success: true, conversationId: data.conversationId };
+
+        if (data.autoAccepted && data.conversationId) {
+          await refreshConversations();
+          setActiveConversationId(data.conversationId);
+          return { success: true, conversationId: data.conversationId, message: data.message };
+        }
+
+        return {
+          success: true,
+          isRequestSent: true,
+          message: data.message || 'Connection request sent!',
+        };
       } catch (err: any) {
         return { success: false, error: err?.message || 'Network error' };
       }
@@ -113,6 +145,65 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
+
+  // Fetch incoming connection requests
+  const refreshRequests = useCallback(async () => {
+    if (!profile) return;
+    try {
+      const res = await fetch('/api/connect/requests');
+      if (res.ok) {
+        const data = await res.json();
+        setIncomingRequests(data.incoming || []);
+      }
+    } catch (e) {
+      console.error('Failed to fetch connection requests:', e);
+    }
+  }, [profile]);
+
+  // Respond to connection request (accept or decline)
+  const respondToRequest = useCallback(
+    async (requestId: string, action: 'accept' | 'decline') => {
+      try {
+        const res = await fetch('/api/connect/respond', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requestId, action }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          return { success: false, error: data.error || 'Failed to respond to request' };
+        }
+
+        // Remove from local list immediately
+        setIncomingRequests(prev => prev.filter(r => r.id !== requestId));
+
+        if (action === 'accept') {
+          await refreshConversations();
+          if (data.conversationId) {
+            setActiveConversationId(data.conversationId);
+          }
+        }
+
+        return {
+          success: true,
+          conversationId: data.conversationId,
+          message: data.message,
+        };
+      } catch (err: any) {
+        return { success: false, error: err?.message || 'Network error' };
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
+  // Periodic poll for incoming requests
+  useEffect(() => {
+    if (!profile) return;
+    refreshRequests();
+    const interval = setInterval(refreshRequests, 5000);
+    return () => clearInterval(interval);
+  }, [profile, refreshRequests]);
 
   // Load conversations
   const refreshConversations = useCallback(async () => {
@@ -819,6 +910,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         broadcastTyping,
         markConversationAsRead,
         refreshConversations,
+        incomingRequests,
+        refreshRequests,
+        respondToRequest,
         connectWithPartner,
       }}
     >

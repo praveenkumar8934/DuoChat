@@ -26,6 +26,7 @@ import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { BrandLogo } from '@/components/ui/brand-logo';
 import { InviteModal } from './invite-modal';
+import { NotificationBell } from './notification-bar';
 import { formatMessageTime, cn } from '@/lib/utils';
 import { useRomanticFeatures } from '@/lib/romantic-features';
 import { formatDuoId } from '@/lib/duo-id';
@@ -91,16 +92,20 @@ export function Sidebar() {
           <div className="flex items-center justify-between">
             <BrandLogo size="md" />
 
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setIsInviteOpen(true)}
-              className="rounded-xl text-xs gap-1.5 border-primary/20 bg-primary/5 text-primary hover:bg-primary/15 hover:text-primary transition-all cursor-pointer font-medium"
-              title="Connect partner"
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>Connect</span>
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <NotificationBell />
+
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setIsInviteOpen(true)}
+                className="rounded-xl text-xs gap-1.5 border-primary/20 bg-primary/5 text-primary hover:bg-primary/15 hover:text-primary transition-all cursor-pointer font-medium"
+                title="Connect partner"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Connect</span>
+              </Button>
+            </div>
           </div>
 
           {/* Intimate Subtitle Ribbon */}

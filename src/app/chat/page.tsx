@@ -13,6 +13,7 @@ import { UserPlus, Sparkles, Copy, Check, ArrowRight, Loader2, ShieldCheck } fro
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { InviteModal } from '@/components/chat/invite-modal';
+import { TopNotificationBar } from '@/components/chat/notification-bar';
 import { BrandLogo } from '@/components/ui/brand-logo';
 import { formatDuoId } from '@/lib/duo-id';
 import { toast } from '@/components/ui/toast';
@@ -63,12 +64,17 @@ export default function ChatPage() {
 
     setIsConnecting(true);
     try {
-      const convId = await connectWithPartner(partnerInput.trim());
-      if (convId) {
-        toast.success('Connected successfully! Starting your conversation.');
-        setPartnerInput('');
+      const res = await connectWithPartner(partnerInput.trim());
+      if (res.success) {
+        if (res.isRequestSent) {
+          toast.success(res.message || 'Connection request sent! They will appear in your friend list once they accept.');
+          setPartnerInput('');
+        } else {
+          toast.success(res.message || 'Connected successfully! Starting your conversation.');
+          setPartnerInput('');
+        }
       } else {
-        toast.error('Could not find user with that Duo ID or username.');
+        toast.error(res.error || 'Could not find user with that Duo ID or username.');
       }
     } catch (err: any) {
       toast.error(err.message || 'Failed to connect');
@@ -94,6 +100,7 @@ export default function ChatPage() {
           !activeConversationId ? 'hidden md:flex' : 'flex'
         }`}
       >
+        <TopNotificationBar />
         {activeConversationId ? (
           <>
             <ConversationHeader />
