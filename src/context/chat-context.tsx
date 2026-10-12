@@ -51,6 +51,10 @@ export interface ChatContextType {
   connectWithPartner: (
     identifier: string
   ) => Promise<{ success: boolean; conversationId?: string; isRequestSent?: boolean; message?: string; error?: string }>;
+  deleteFriend: (
+    friendId: string,
+    conversationId?: string
+  ) => Promise<{ success: boolean; error?: string; message?: string }>;
 }
 
 export interface ConnectionRequestItem {
@@ -309,7 +313,48 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     [profile?.id, refreshConversations]
   );
 
-  // Real-time synchronization for connection requests
+  // Delete / remove a friend and clean up direct conversation
+  const deleteFriend = useCallback(
+    async (friendId: string, conversationId?: string) => {
+      try {
+        const res = await fetch('/api/connect/remove-friend', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(profile?.id ? { 'x-user-id': profile.id } : {}),
+          },
+          body: JSON.stringify({
+            friendId,
+            conversationId,
+            userId: profile?.id,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          return { success: false, error: data.error || 'Failed to remove friend' };
+        }
+
+        // Optimistically remove from conversations state
+        setConversations(prev =>
+          prev.filter(c => c.id !== conversationId && c.otherUser?.id !== friendId)
+        );
+
+        if (activeConversationId === conversationId) {
+          setActiveConversationId(null);
+        }
+
+        await refreshConversations();
+        await refreshRequests();
+
+        return { success: true, message: data.message || 'Friend removed successfully' };
+      } catch (err: any) {
+        return { success: false, error: err?.message || 'Network error' };
+      }
+    },
+    [profile?.id, activeConversationId, refreshConversations, refreshRequests]
+  );
+
+  // Real-time synchronization for connection requests and friends
   useEffect(() => {
     if (!profile?.id) return;
 
@@ -330,6 +375,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       })
       .on('broadcast', { event: 'request-declined' }, () => {
         refreshRequests();
+      })
+      .on('broadcast', { event: 'friend-removed' }, (payload: any) => {
+        refreshConversations();
+        refreshRequests();
+        if (payload?.payload?.conversationId && payload.payload.conversationId === activeConversationId) {
+          setActiveConversationId(null);
+        }
       })
       .subscribe();
 
@@ -969,6 +1021,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         refreshRequests,
         respondToRequest,
         connectWithPartner,
+        deleteFriend,
       }}
     >
       {children}

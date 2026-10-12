@@ -1,11 +1,25 @@
 'use client';
 
 import * as React from 'react';
-import { ArrowLeft, Search, FolderHeart, ShieldCheck, X, Heart, CalendarHeart, Sparkles } from 'lucide-react';
+import {
+  ArrowLeft,
+  Search,
+  FolderHeart,
+  ShieldCheck,
+  X,
+  Heart,
+  CalendarHeart,
+  Sparkles,
+  UserMinus,
+  Trash2,
+  Loader2,
+} from 'lucide-react';
 import { useChat } from '@/context/chat-context';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { formatLastSeen } from '@/lib/utils';
+import { formatDuoId } from '@/lib/duo-id';
+import { toast } from '@/components/ui/toast';
 import { useRomanticFeatures } from '@/lib/romantic-features';
 import { Dialog } from '@/components/ui/dialog';
 import Link from 'next/link';
@@ -21,11 +35,14 @@ export function ConversationHeader() {
     isMediaDrawerOpen,
     setIsMediaDrawerOpen,
     typingUsers,
+    deleteFriend,
   } = useChat();
 
   const { anniversary, daysTogether, updateAnniversary } = useRomanticFeatures();
   const [isDateDialogOpen, setIsDateDialogOpen] = React.useState(false);
   const [selectedDate, setSelectedDate] = React.useState(anniversary || '');
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = React.useState(false);
+  const [isDeletingFriend, setIsDeletingFriend] = React.useState(false);
 
   const friend = activeConversation?.otherUser;
 
@@ -33,6 +50,24 @@ export function ConversationHeader() {
     e.preventDefault();
     updateAnniversary(selectedDate || null);
     setIsDateDialogOpen(false);
+  };
+
+  const handleDeleteFriend = async () => {
+    if (!friend || !activeConversation) return;
+    setIsDeletingFriend(true);
+    try {
+      const res = await deleteFriend(friend.id, activeConversation.id);
+      if (res.success) {
+        toast.success(`${friend.display_name} removed from friends.`);
+        setIsDeleteModalOpen(false);
+      } else {
+        toast.error(res.error || 'Failed to remove friend');
+      }
+    } catch {
+      toast.error('Network error. Failed to remove friend.');
+    } finally {
+      setIsDeletingFriend(false);
+    }
   };
 
   return (
@@ -150,6 +185,17 @@ export function ConversationHeader() {
             >
               <FolderHeart className="w-4 h-4" />
             </Button>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsDeleteModalOpen(true)}
+              className="rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+              title="Remove friend / disconnect partner"
+              aria-label="Remove friend"
+            >
+              <UserMinus className="w-4 h-4" />
+            </Button>
           </div>
         </div>
 
@@ -240,6 +286,60 @@ export function ConversationHeader() {
             </div>
           </div>
         </form>
+      </Dialog>
+
+      {/* Remove Friend Confirmation Modal */}
+      <Dialog
+        isOpen={isDeleteModalOpen}
+        onClose={() => !isDeletingFriend && setIsDeleteModalOpen(false)}
+        title="Remove Friend"
+        size="sm"
+      >
+        <div className="space-y-4 pt-1">
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-destructive/10 border border-destructive/20">
+            <div className="w-10 h-10 rounded-full bg-destructive/20 text-destructive flex items-center justify-center shrink-0">
+              <UserMinus className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground truncate">
+                {friend?.display_name || 'Partner'}
+              </p>
+              <p className="text-xs text-muted-foreground font-mono truncate">
+                {friend ? formatDuoId(friend) : ''}
+              </p>
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Are you sure you want to remove <strong className="text-foreground">{friend?.display_name || 'this partner'}</strong> from your friends? This will delete your conversation history and disconnect you as partners.
+          </p>
+
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/50">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isDeletingFriend}
+              onClick={() => setIsDeleteModalOpen(false)}
+              className="text-xs rounded-xl cursor-pointer"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={isDeletingFriend}
+              onClick={handleDeleteFriend}
+              className="text-xs rounded-xl gap-1.5 bg-rose-600 hover:bg-rose-700 text-white cursor-pointer"
+            >
+              {isDeletingFriend ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="w-3.5 h-3.5" />
+              )}
+              <span>Remove Friend</span>
+            </Button>
+          </div>
+        </div>
       </Dialog>
     </>
   );

@@ -17,11 +17,14 @@ import {
   CheckCheck,
   UserPlus,
   CheckCircle2,
+  Trash2,
+  UserMinus,
 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { useChat } from '@/context/chat-context';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { Dialog } from '@/components/ui/dialog';
 import { toast } from '@/components/ui/toast';
 import { formatDuoId } from '@/lib/duo-id';
 import { cn } from '@/lib/utils';
@@ -40,11 +43,14 @@ export function NotificationBell({ onOpenConnect, className }: NotificationBellP
     respondToRequest,
     setActiveConversationId,
     friendPresence,
+    deleteFriend,
   } = useChat();
 
   const [isOpen, setIsOpen] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<'friends' | 'requests'>('requests');
   const [processingId, setProcessingId] = React.useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = React.useState<{ friend: Profile; conversationId: string } | null>(null);
+  const [isDeleting, setIsDeleting] = React.useState(false);
   const [copiedMyId, setCopiedMyId] = React.useState(false);
   const [coords, setCoords] = React.useState<{ top: number; left: number; width: number } | null>(null);
 
@@ -172,6 +178,24 @@ export function NotificationBell({ onOpenConnect, className }: NotificationBellP
   const handleOpenChat = (conversationId: string) => {
     setActiveConversationId(conversationId);
     setIsOpen(false);
+  };
+
+  const handleDeleteFriendConfirmed = async () => {
+    if (!confirmDelete) return;
+    setIsDeleting(true);
+    try {
+      const res = await deleteFriend(confirmDelete.friend.id, confirmDelete.conversationId);
+      if (res.success) {
+        toast.success(`${confirmDelete.friend.display_name} removed from friends.`);
+        setConfirmDelete(null);
+      } else {
+        toast.error(res.error || 'Failed to remove friend');
+      }
+    } catch {
+      toast.error('Network error. Failed to remove friend.');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleCopyMyDuoId = () => {
@@ -372,16 +396,28 @@ export function NotificationBell({ onOpenConnect, className }: NotificationBellP
                               </div>
                             </div>
 
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleOpenChat(conversationId)}
-                              className="h-7 px-2.5 rounded-lg text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10 hover:text-primary shrink-0 cursor-pointer"
-                              title={`Chat with ${friend.display_name}`}
-                            >
-                              <MessageSquare className="w-3 h-3" />
-                              <span>Chat</span>
-                            </Button>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleOpenChat(conversationId)}
+                                className="h-7 px-2.5 rounded-lg text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10 hover:text-primary shrink-0 cursor-pointer"
+                                title={`Chat with ${friend.display_name}`}
+                              >
+                                <MessageSquare className="w-3 h-3" />
+                                <span>Chat</span>
+                              </Button>
+
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDelete({ friend, conversationId })}
+                                className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                                title={`Remove ${friend.display_name} from friends`}
+                                aria-label={`Remove ${friend.display_name}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
                         );
                       })}
@@ -512,6 +548,60 @@ export function NotificationBell({ onOpenConnect, className }: NotificationBellP
           </div>
         </>
       )}
+
+      {/* Remove Friend Confirmation Dialog */}
+      <Dialog
+        isOpen={!!confirmDelete}
+        onClose={() => !isDeleting && setConfirmDelete(null)}
+        title="Remove Friend"
+        size="sm"
+      >
+        <div className="space-y-4 pt-1">
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-destructive/10 border border-destructive/20">
+            <div className="w-10 h-10 rounded-full bg-destructive/20 text-destructive flex items-center justify-center shrink-0">
+              <UserMinus className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground truncate">
+                {confirmDelete?.friend.display_name}
+              </p>
+              <p className="text-xs text-muted-foreground font-mono truncate">
+                {confirmDelete?.friend ? formatDuoId(confirmDelete.friend) : ''}
+              </p>
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Are you sure you want to remove <strong className="text-foreground">{confirmDelete?.friend.display_name}</strong> from your friends? This will delete your conversation history and disconnect your partner.
+          </p>
+
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/50">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isDeleting}
+              onClick={() => setConfirmDelete(null)}
+              className="text-xs rounded-xl cursor-pointer"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={isDeleting}
+              onClick={handleDeleteFriendConfirmed}
+              className="text-xs rounded-xl gap-1.5 bg-rose-600 hover:bg-rose-700 text-white cursor-pointer"
+            >
+              {isDeleting ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="w-3.5 h-3.5" />
+              )}
+              <span>Remove Friend</span>
+            </Button>
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 }
