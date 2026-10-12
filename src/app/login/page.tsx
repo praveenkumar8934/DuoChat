@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Mail, Lock, Eye, EyeOff, Sparkles, ArrowRight, Heart } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, UserPlus } from 'lucide-react';
 import { loginSchema, LoginFormData } from '@/lib/validations/auth';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { useAuth } from '@/context/auth-context';
@@ -18,21 +18,23 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get('redirectTo') || '/chat';
+  const initialEmail = searchParams.get('email') || '';
   const { isConfigured } = useAuth();
 
   const [showPassword, setShowPassword] = React.useState(false);
   const [authError, setAuthError] = React.useState<string | null>(null);
+  const [isNotRegistered, setIsNotRegistered] = React.useState(false);
+  const [attemptedEmail, setAttemptedEmail] = React.useState(initialEmail);
   const [isLoading, setIsLoading] = React.useState(false);
 
   const {
     register,
     handleSubmit,
-    setValue,
     formState: { errors },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: '',
+      email: initialEmail,
       password: '',
     },
   });
@@ -40,34 +42,63 @@ function LoginForm() {
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     setAuthError(null);
+    setIsNotRegistered(false);
+    const cleanEmail = data.email.trim();
+    setAttemptedEmail(cleanEmail);
 
     if (!isConfigured) {
-      setTimeout(() => {
-        setIsLoading(false);
-        router.push(redirectTo);
-      }, 500);
+      setAuthError('Authentication service is not configured. Please contact support.');
+      setIsLoading(false);
       return;
     }
 
     try {
       const supabase = getSupabaseBrowserClient();
       const { error } = await supabase.auth.signInWithPassword({
-        email: data.email,
+        email: cleanEmail,
         password: data.password,
       });
 
       if (error) {
-        setAuthError(error.message);
+        // Check if the user exists in database
+        try {
+          const checkRes = await fetch('/api/auth/check-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: cleanEmail }),
+          });
+          const checkData = await checkRes.json();
+
+          if (checkData.exists === false) {
+            setIsNotRegistered(true);
+            setAuthError(
+              'No account found with this email. You are not registered yet. Please create an account first before logging in.'
+            );
+            setIsLoading(false);
+            return;
+          }
+        } catch (checkErr) {
+          console.warn('Unable to verify user registration status:', checkErr);
+        }
+
+        // User is registered, but credentials failed
+        const lowerMsg = (error.message || '').toLowerCase();
+        if (lowerMsg.includes('invalid login credentials')) {
+          setAuthError('Incorrect password. Please verify your password and try again.');
+        } else if (lowerMsg.includes('email not confirmed')) {
+          setAuthError('Your email address has not been confirmed yet. Please check your inbox.');
+        } else {
+          setAuthError(error.message);
+        }
         setIsLoading(false);
       } else {
         router.push(redirectTo);
       }
     } catch (err: unknown) {
-      setAuthError((err as Error)?.message || 'Sign in failed');
+      setAuthError((err as Error)?.message || 'Sign in failed. Please try again.');
       setIsLoading(false);
     }
   };
-
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground selection:bg-rose-500/20">
@@ -94,11 +125,31 @@ function LoginForm() {
 
           <div className="p-6 sm:p-7 rounded-3xl bg-card/90 border border-border/80 shadow-2xl space-y-5 backdrop-blur-md">
             {authError && (
-              <div className="p-3 rounded-2xl bg-destructive/10 text-destructive text-xs border border-destructive/20">
-                {authError}
+              <div
+                className={`p-4 rounded-2xl text-xs border space-y-2.5 ${
+                  isNotRegistered
+                    ? 'bg-amber-500/10 text-amber-900 dark:text-amber-200 border-amber-500/30'
+                    : 'bg-destructive/10 text-destructive border-destructive/20'
+                }`}
+              >
+                <div className="flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-current" />
+                  <p className="font-medium leading-relaxed">{authError}</p>
+                </div>
+
+                {isNotRegistered && (
+                  <div className="pt-1 flex items-center gap-2">
+                    <Link
+                      href={`/signup?email=${encodeURIComponent(attemptedEmail)}`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 text-white dark:bg-amber-500 hover:opacity-95 font-semibold text-xs shadow-xs transition-opacity cursor-pointer"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      <span>Create Account Now</span>
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
-
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div className="space-y-1.5">

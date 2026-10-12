@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useRouter } from 'next/navigation';
 import { useChat } from '@/context/chat-context';
 import { useAuth } from '@/context/auth-context';
 import { Sidebar } from '@/components/chat/sidebar';
@@ -17,12 +18,31 @@ import { formatDuoId } from '@/lib/duo-id';
 import { toast } from '@/components/ui/toast';
 
 export default function ChatPage() {
+  const router = useRouter();
   const { activeConversationId, conversations, connectWithPartner } = useChat();
-  const { user, profile } = useAuth();
+  const { user, profile, isLoading } = useAuth();
   const [isInviteOpen, setIsInviteOpen] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   const [partnerInput, setPartnerInput] = React.useState('');
   const [isConnecting, setIsConnecting] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isLoading && !user) {
+      router.push('/login?redirectTo=/chat');
+    }
+  }, [isLoading, user, router]);
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-background text-foreground text-xs font-medium">
+        Loading our space...
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
 
   const duoId = formatDuoId(profile || user?.id);
 

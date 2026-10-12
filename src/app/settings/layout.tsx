@@ -2,8 +2,9 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { ArrowLeft, User, Palette, Shield } from 'lucide-react';
+import { useAuth } from '@/context/auth-context';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { BrandLogo } from '@/components/ui/brand-logo';
 import { cn } from '@/lib/utils';
@@ -14,6 +15,24 @@ export default function SettingsLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, isLoading } = useAuth();
+
+  React.useEffect(() => {
+    if (!isLoading && !user) {
+      router.push(`/login?redirectTo=${encodeURIComponent(pathname)}`);
+    }
+  }, [isLoading, user, router, pathname]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background text-foreground text-xs font-medium">
+        Loading settings...
+      </div>
+    );
+  }
+
+  if (!user) return null;
 
   const navItems = [
     { href: '/settings/profile', label: 'Profile', icon: User },

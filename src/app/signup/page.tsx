@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -14,7 +14,8 @@ import {
   EyeOff,
   ArrowRight,
   CheckCircle2,
-  Sparkles,
+  AlertCircle,
+  LogIn,
 } from 'lucide-react';
 import { signupSchema, SignupFormData } from '@/lib/validations/auth';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
@@ -24,10 +25,14 @@ import { Input } from '@/components/ui/input';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { BrandLogo } from '@/components/ui/brand-logo';
 
-export default function SignupPage() {
+function SignupForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialEmail = searchParams.get('email') || '';
+
   const [showPassword, setShowPassword] = React.useState(false);
   const [authError, setAuthError] = React.useState<string | null>(null);
+  const [isAlreadyRegistered, setIsAlreadyRegistered] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const [signupSuccess, setSignupSuccess] = React.useState(false);
 
@@ -41,7 +46,7 @@ export default function SignupPage() {
     defaultValues: {
       displayName: '',
       username: '',
-      email: '',
+      email: initialEmail,
       password: '',
       confirmPassword: '',
     },
@@ -57,30 +62,36 @@ export default function SignupPage() {
   const onSubmit = async (data: SignupFormData) => {
     setIsLoading(true);
     setAuthError(null);
+    setIsAlreadyRegistered(false);
 
     if (!isSupabaseConfigured()) {
-      setTimeout(() => {
-        setIsLoading(false);
-        router.push('/chat');
-      }, 500);
+      setAuthError('Authentication service is not configured. Please contact support.');
+      setIsLoading(false);
       return;
     }
 
     try {
       const supabase = getSupabaseBrowserClient();
+      const cleanEmail = data.email.trim();
       const { data: authData, error } = await supabase.auth.signUp({
-        email: data.email,
+        email: cleanEmail,
         password: data.password,
         options: {
           data: {
-            display_name: data.displayName,
-            username: data.username.toLowerCase(),
+            display_name: data.displayName.trim(),
+            username: data.username.toLowerCase().trim(),
           },
         },
       });
 
       if (error) {
-        setAuthError(error.message);
+        const lowerMsg = (error.message || '').toLowerCase();
+        if (lowerMsg.includes('already registered') || lowerMsg.includes('already in use')) {
+          setIsAlreadyRegistered(true);
+          setAuthError('An account with this email already exists. Please sign in instead.');
+        } else {
+          setAuthError(error.message);
+        }
         setIsLoading(false);
       } else if (authData.session) {
         router.push('/chat');
@@ -89,7 +100,7 @@ export default function SignupPage() {
         setIsLoading(false);
       }
     } catch (err: unknown) {
-      setAuthError((err as Error)?.message || 'Sign up failed');
+      setAuthError((err as Error)?.message || 'Sign up failed. Please try again.');
       setIsLoading(false);
     }
   };
@@ -121,9 +132,9 @@ export default function SignupPage() {
             {signupSuccess ? (
               <div className="p-5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-center space-y-3">
                 <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
-                <h3 className="text-base font-semibold text-foreground">Check your email</h3>
+                <h3 className="text-base font-semibold text-foreground">Account Created!</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  We&apos;ve sent a confirmation link to your inbox. Once verified, you can sign in and start your private conversation.
+                  Your account is registered. You can now sign in to connect with your partner.
                 </p>
                 <Link href="/login" className="inline-block mt-2">
                   <Button size="sm" className="rounded-xl">
@@ -134,8 +145,23 @@ export default function SignupPage() {
             ) : (
               <>
                 {authError && (
-                  <div className="p-3 rounded-2xl bg-destructive/10 text-destructive text-xs border border-destructive/20">
-                    {authError}
+                  <div className="p-4 rounded-2xl bg-destructive/10 text-destructive text-xs border border-destructive/20 space-y-2">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                      <p className="font-medium leading-relaxed">{authError}</p>
+                    </div>
+
+                    {isAlreadyRegistered && (
+                      <div className="pt-1">
+                        <Link
+                          href="/login"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground font-semibold text-xs shadow-xs hover:opacity-90"
+                        >
+                          <LogIn className="w-3.5 h-3.5" />
+                          <span>Go to Sign In</span>
+                        </Link>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -260,5 +286,19 @@ export default function SignupPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-background text-foreground text-sm">
+          Loading sign up...
+        </div>
+      }
+    >
+      <SignupForm />
+    </React.Suspense>
   );
 }
