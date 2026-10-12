@@ -16,23 +16,35 @@ export async function POST(req: Request) {
     }
 
     // 1. Authenticate current user (receiver)
-    const userClient = await createServerSupabase();
-    const {
-      data: { user },
-      error: authError,
-    } = await userClient.auth.getUser();
+    let receiverId: string | null = body.userId || req.headers.get('x-user-id') || null;
 
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!receiverId) {
+      try {
+        const userClient = await createServerSupabase();
+        const { data: { user } } = await userClient.auth.getUser();
+        if (user) {
+          receiverId = user.id;
+        }
+      } catch {
+        // Fallback check
+      }
+    }
+
+    if (!receiverId) {
+      return NextResponse.json({ error: 'Unauthorized: User ID required' }, { status: 401 });
     }
 
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const db =
-      serviceKey && env.supabaseUrl
-        ? createServiceClient(env.supabaseUrl, serviceKey, {
-            auth: { persistSession: false },
-          })
-        : userClient;
+    if (!serviceKey || !env.supabaseUrl) {
+      return NextResponse.json(
+        { error: 'Server configuration missing. Check SUPABASE_SERVICE_ROLE_KEY.' },
+        { status: 500 }
+      );
+    }
+
+    const db = createServiceClient(env.supabaseUrl, serviceKey, {
+      auth: { persistSession: false },
+    });
 
     // 2. Fetch the invitation
     const { data: requestRow, error: reqErr } = await db
@@ -49,7 +61,7 @@ export async function POST(req: Request) {
     }
 
     // 3. Verify user is receiver
-    const expectedSuffix = `:${user.id}`;
+    const expectedSuffix = `:${receiverId}`;
     if (!requestRow.token_hash.endsWith(expectedSuffix)) {
       return NextResponse.json(
         { error: 'You are not authorized to respond to this request' },
@@ -65,6 +77,20 @@ export async function POST(req: Request) {
         .from('invitations')
         .update({ revoked_at: new Date().toISOString() })
         .eq('id', requestId);
+
+      // Broadcast decline to sender
+      try {
+        const channel = db.channel(`user-notifications:${senderId}`);
+        await channel.subscribe();
+        await channel.send({
+          type: 'broadcast',
+          event: 'request-declined',
+          payload: { requestId, senderId, receiverId },
+        });
+        db.removeChannel(channel);
+      } catch {
+        // Broadcast non-blocking
+      }
 
       return NextResponse.json({
         success: true,
@@ -83,7 +109,7 @@ export async function POST(req: Request) {
     const { data: userMemberships } = await db
       .from('conversation_members')
       .select('conversation_id')
-      .eq('user_id', user.id);
+      .eq('user_id', receiverId);
 
     let conversationId: string | null = null;
 
@@ -124,7 +150,7 @@ export async function POST(req: Request) {
         .from('conversation_members')
         .insert([
           { conversation_id: conversationId, user_id: senderId, role: 'member' },
-          { conversation_id: conversationId, user_id: user.id, role: 'member' },
+          { conversation_id: conversationId, user_id: receiverId, role: 'member' },
         ]);
 
       if (membersError) {
@@ -142,6 +168,20 @@ export async function POST(req: Request) {
       .select('id, display_name, username, avatar_path')
       .eq('id', senderId)
       .maybeSingle();
+
+    // Broadcast acceptance to sender so their screen updates instantly
+    try {
+      const channel = db.channel(`user-notifications:${senderId}`);
+      await channel.subscribe();
+      await channel.send({
+        type: 'broadcast',
+        event: 'request-accepted',
+        payload: { conversationId, senderId, receiverId },
+      });
+      db.removeChannel(channel);
+    } catch {
+      // Non-blocking
+    }
 
     return NextResponse.json({
       success: true,

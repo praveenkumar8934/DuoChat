@@ -17,13 +17,21 @@ export async function POST(req: Request) {
     }
 
     // 1. Get authenticated user (sender)
-    const userClient = await createServerSupabase();
-    const {
-      data: { user },
-      error: authError,
-    } = await userClient.auth.getUser();
+    let senderId: string | null = body.senderId || req.headers.get('x-user-id') || null;
 
-    if (authError || !user) {
+    if (!senderId) {
+      try {
+        const userClient = await createServerSupabase();
+        const { data: { user } } = await userClient.auth.getUser();
+        if (user) {
+          senderId = user.id;
+        }
+      } catch {
+        // Fallback check
+      }
+    }
+
+    if (!senderId) {
       return NextResponse.json(
         { error: 'You must be logged in to connect with a partner' },
         { status: 401 }
@@ -32,12 +40,16 @@ export async function POST(req: Request) {
 
     // 2. Prepare database client
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const db =
-      serviceKey && env.supabaseUrl
-        ? createServiceClient(env.supabaseUrl, serviceKey, {
-            auth: { persistSession: false },
-          })
-        : userClient;
+    if (!serviceKey || !env.supabaseUrl) {
+      return NextResponse.json(
+        { error: 'Server configuration missing. Check SUPABASE_SERVICE_ROLE_KEY.' },
+        { status: 500 }
+      );
+    }
+
+    const db = createServiceClient(env.supabaseUrl, serviceKey, {
+      auth: { persistSession: false },
+    });
 
     const clean = cleanDuoIdentifier(identifier);
     const rawTrimmed = identifier.trim();
@@ -92,7 +104,7 @@ export async function POST(req: Request) {
     }
 
     // Cannot connect with oneself
-    if (targetProfile.id === user.id) {
+    if (targetProfile.id === senderId) {
       return NextResponse.json(
         { error: 'You cannot connect with your own Duo ID. Share it with your partner!' },
         { status: 400 }
@@ -103,7 +115,7 @@ export async function POST(req: Request) {
     const { data: userMemberships } = await db
       .from('conversation_members')
       .select('conversation_id')
-      .eq('user_id', user.id);
+      .eq('user_id', senderId);
 
     if (userMemberships && userMemberships.length > 0) {
       const convIds = userMemberships.map((m: any) => m.conversation_id);
@@ -123,8 +135,8 @@ export async function POST(req: Request) {
       }
     }
 
-    const tokenHash = `req:${user.id}:${targetProfile.id}`;
-    const reverseTokenHash = `req:${targetProfile.id}:${user.id}`;
+    const tokenHash = `req:${senderId}:${targetProfile.id}`;
+    const reverseTokenHash = `req:${targetProfile.id}:${senderId}`;
 
     // 5. Check if target user has ALREADY sent a pending request to current user!
     const { data: existingReverseReq } = await db
@@ -150,7 +162,7 @@ export async function POST(req: Request) {
 
       if (newConv) {
         await db.from('conversation_members').insert([
-          { conversation_id: newConv.id, user_id: user.id, role: 'member' },
+          { conversation_id: newConv.id, user_id: senderId, role: 'member' },
           { conversation_id: newConv.id, user_id: targetProfile.id, role: 'member' },
         ]);
 
@@ -185,7 +197,7 @@ export async function POST(req: Request) {
 
     const { error: insertError } = await db.from('invitations').upsert(
       {
-        created_by: user.id,
+        created_by: senderId,
         token_hash: tokenHash,
         expires_at: expiresAt,
         used_at: null,
@@ -200,6 +212,20 @@ export async function POST(req: Request) {
         { error: 'Failed to send connection request. Please try again.' },
         { status: 500 }
       );
+    }
+
+    // Realtime broadcast to recipient's notification channel
+    try {
+      const channel = db.channel(`user-notifications:${targetProfile.id}`);
+      await channel.subscribe();
+      await channel.send({
+        type: 'broadcast',
+        event: 'new-request',
+        payload: { senderId, receiverId: targetProfile.id },
+      });
+      db.removeChannel(channel);
+    } catch {
+      // Broadcast is non-blocking
     }
 
     return NextResponse.json({

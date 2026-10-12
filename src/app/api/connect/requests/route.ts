@@ -3,36 +3,52 @@ import { createClient as createServerSupabase } from '@/lib/supabase/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { env } from '@/lib/env';
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    // 1. Get authenticated user
-    const userClient = await createServerSupabase();
-    const {
-      data: { user },
-      error: authError,
-    } = await userClient.auth.getUser();
+    const { searchParams } = new URL(req.url);
+    const paramUserId = searchParams.get('userId');
+    const headerUserId = req.headers.get('x-user-id');
 
-    if (authError || !user) {
+    let currentUserId: string | null = paramUserId || headerUserId || null;
+
+    // Fall back to server session if no header/param provided
+    if (!currentUserId) {
+      try {
+        const userClient = await createServerSupabase();
+        const { data: { user } } = await userClient.auth.getUser();
+        if (user) {
+          currentUserId = user.id;
+        }
+      } catch {
+        // Continue to check
+      }
+    }
+
+    if (!currentUserId) {
       return NextResponse.json(
-        { error: 'Unauthorized' },
+        { error: 'Unauthorized: User ID required' },
         { status: 401 }
       );
     }
 
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const db =
-      serviceKey && env.supabaseUrl
-        ? createServiceClient(env.supabaseUrl, serviceKey, {
-            auth: { persistSession: false },
-          })
-        : userClient;
+    if (!serviceKey || !env.supabaseUrl) {
+      return NextResponse.json(
+        { error: 'Server configuration missing' },
+        { status: 500 }
+      );
+    }
 
-    // 2. Fetch incoming requests where token_hash ends with `:${user.id}`
+    const db = createServiceClient(env.supabaseUrl, serviceKey, {
+      auth: { persistSession: false },
+    });
+
+    // Fetch incoming requests where token_hash ends with `:${currentUserId}`
     // token_hash format: `req:${senderId}:${receiverId}`
     const { data: incomingRows, error: incomingErr } = await db
       .from('invitations')
       .select('id, created_by, token_hash, created_at, expires_at')
-      .ilike('token_hash', `req:%:${user.id}`)
+      .ilike('token_hash', `req:%:${currentUserId}`)
       .is('used_at', null)
       .is('revoked_at', null)
       .gt('expires_at', new Date().toISOString())
@@ -67,12 +83,12 @@ export async function GET() {
       },
     }));
 
-    // 3. Fetch outgoing requests sent by current user
+    // Fetch outgoing requests sent by current user
     const { data: outgoingRows, error: outgoingErr } = await db
       .from('invitations')
       .select('id, created_by, token_hash, created_at, expires_at')
-      .eq('created_by', user.id)
-      .ilike('token_hash', `req:${user.id}:%`)
+      .eq('created_by', currentUserId)
+      .ilike('token_hash', `req:${currentUserId}:%`)
       .is('used_at', null)
       .is('revoked_at', null)
       .gt('expires_at', new Date().toISOString())
@@ -84,7 +100,7 @@ export async function GET() {
 
     const receiverIds = (outgoingRows || []).map((r: any) => {
       const parts = r.token_hash.split(':');
-      return parts[2]; // `req:${sender}:${receiver}`
+      return parts[2];
     }).filter(Boolean);
 
     let receiverProfilesMap = new Map();

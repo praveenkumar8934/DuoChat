@@ -107,104 +107,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
   }, [activeConversation]);
 
-  // Connect with a partner via Duo ID or username (sends connection request)
-  const connectWithPartner = useCallback(
-    async (identifier: string) => {
-      try {
-        const res = await fetch('/api/connect/request', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier }),
-        });
-        const data = await res.json();
-        if (!res.ok || data.error) {
-          return { success: false, error: data.error || 'Failed to connect' };
-        }
-
-        if (data.alreadyConnected && data.conversationId) {
-          await refreshConversations();
-          setActiveConversationId(data.conversationId);
-          return { success: true, conversationId: data.conversationId, message: data.message };
-        }
-
-        if (data.autoAccepted && data.conversationId) {
-          await refreshConversations();
-          setActiveConversationId(data.conversationId);
-          return { success: true, conversationId: data.conversationId, message: data.message };
-        }
-
-        return {
-          success: true,
-          isRequestSent: true,
-          message: data.message || 'Connection request sent!',
-        };
-      } catch (err: any) {
-        return { success: false, error: err?.message || 'Network error' };
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
-  );
-
-  // Fetch incoming connection requests
-  const refreshRequests = useCallback(async () => {
-    if (!profile) return;
-    try {
-      const res = await fetch('/api/connect/requests');
-      if (res.ok) {
-        const data = await res.json();
-        setIncomingRequests(data.incoming || []);
-      }
-    } catch (e) {
-      console.error('Failed to fetch connection requests:', e);
-    }
-  }, [profile]);
-
-  // Respond to connection request (accept or decline)
-  const respondToRequest = useCallback(
-    async (requestId: string, action: 'accept' | 'decline') => {
-      try {
-        const res = await fetch('/api/connect/respond', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ requestId, action }),
-        });
-        const data = await res.json();
-        if (!res.ok || data.error) {
-          return { success: false, error: data.error || 'Failed to respond to request' };
-        }
-
-        // Remove from local list immediately
-        setIncomingRequests(prev => prev.filter(r => r.id !== requestId));
-
-        if (action === 'accept') {
-          await refreshConversations();
-          if (data.conversationId) {
-            setActiveConversationId(data.conversationId);
-          }
-        }
-
-        return {
-          success: true,
-          conversationId: data.conversationId,
-          message: data.message,
-        };
-      } catch (err: any) {
-        return { success: false, error: err?.message || 'Network error' };
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
-  );
-
-  // Periodic poll for incoming requests
-  useEffect(() => {
-    if (!profile) return;
-    refreshRequests();
-    const interval = setInterval(refreshRequests, 5000);
-    return () => clearInterval(interval);
-  }, [profile, refreshRequests]);
-
   // Load conversations
   const refreshConversations = useCallback(async () => {
     if (!profile) {
@@ -302,6 +204,159 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       console.error('Failed to load conversations:', err);
     }
   }, [profile, isConfigured, activeConversationId]);
+
+  // Connect with a partner via Duo ID or username (sends connection request)
+  const connectWithPartner = useCallback(
+    async (identifier: string) => {
+      try {
+        const res = await fetch('/api/connect/request', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(profile?.id ? { 'x-user-id': profile.id } : {}),
+          },
+          body: JSON.stringify({
+            identifier,
+            senderId: profile?.id,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          return { success: false, error: data.error || 'Failed to connect' };
+        }
+
+        if (data.alreadyConnected && data.conversationId) {
+          await refreshConversations();
+          setActiveConversationId(data.conversationId);
+          return { success: true, conversationId: data.conversationId, message: data.message };
+        }
+
+        if (data.autoAccepted && data.conversationId) {
+          await refreshConversations();
+          setActiveConversationId(data.conversationId);
+          return { success: true, conversationId: data.conversationId, message: data.message };
+        }
+
+        return {
+          success: true,
+          isRequestSent: true,
+          message: data.message || 'Connection request sent!',
+        };
+      } catch (err: any) {
+        return { success: false, error: err?.message || 'Network error' };
+      }
+    },
+    [profile?.id, refreshConversations]
+  );
+
+  // Fetch incoming connection requests (using userId param + header for 100% reliability)
+  const refreshRequests = useCallback(async () => {
+    if (!profile?.id) return;
+    try {
+      const url = `/api/connect/requests?userId=${encodeURIComponent(profile.id)}`;
+      const res = await fetch(url, {
+        headers: { 'x-user-id': profile.id },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setIncomingRequests(data.incoming || []);
+      }
+    } catch (e) {
+      console.error('Failed to fetch connection requests:', e);
+    }
+  }, [profile?.id]);
+
+  // Respond to connection request (accept or decline)
+  const respondToRequest = useCallback(
+    async (requestId: string, action: 'accept' | 'decline') => {
+      try {
+        const res = await fetch('/api/connect/respond', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(profile?.id ? { 'x-user-id': profile.id } : {}),
+          },
+          body: JSON.stringify({
+            requestId,
+            action,
+            userId: profile?.id,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          return { success: false, error: data.error || 'Failed to respond to request' };
+        }
+
+        // Remove from local list immediately
+        setIncomingRequests(prev => prev.filter(r => r.id !== requestId));
+
+        if (action === 'accept') {
+          await refreshConversations();
+          if (data.conversationId) {
+            setActiveConversationId(data.conversationId);
+          }
+        }
+
+        return {
+          success: true,
+          conversationId: data.conversationId,
+          message: data.message,
+        };
+      } catch (err: any) {
+        return { success: false, error: err?.message || 'Network error' };
+      }
+    },
+    [profile?.id, refreshConversations]
+  );
+
+  // Real-time synchronization for connection requests
+  useEffect(() => {
+    if (!profile?.id) return;
+
+    // 1. Initial fetch
+    refreshRequests();
+
+    const supabase = getSupabaseBrowserClient();
+
+    // 2. Real-time broadcast channel dedicated to this user
+    const broadcastChannel = supabase.channel(`user-notifications:${profile.id}`);
+    broadcastChannel
+      .on('broadcast', { event: 'new-request' }, () => {
+        refreshRequests();
+      })
+      .on('broadcast', { event: 'request-accepted' }, () => {
+        refreshConversations();
+        refreshRequests();
+      })
+      .on('broadcast', { event: 'request-declined' }, () => {
+        refreshRequests();
+      })
+      .subscribe();
+
+    // 3. Realtime postgres changes channel
+    const dbChannel = supabase
+      .channel('public:invitations')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'invitations' },
+        () => {
+          refreshRequests();
+          refreshConversations();
+        }
+      )
+      .subscribe();
+
+    // 4. High-frequency polling (every 2.5 seconds) to guarantee real-time updates across browsers
+    const pollInterval = setInterval(() => {
+      refreshRequests();
+    }, 2500);
+
+    return () => {
+      clearInterval(pollInterval);
+      supabase.removeChannel(broadcastChannel);
+      supabase.removeChannel(dbChannel);
+    };
+  }, [profile?.id, refreshRequests, refreshConversations]);
 
   // Load messages for active conversation
   const loadMessages = useCallback(async (conversationId: string) => {

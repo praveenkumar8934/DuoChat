@@ -18,6 +18,8 @@ import {
   CalendarHeart,
   Copy,
   Check,
+  X,
+  Bell,
 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { useChat } from '@/context/chat-context';
@@ -39,6 +41,8 @@ export function Sidebar() {
     setActiveConversationId,
     friendPresence,
     setIsMediaDrawerOpen,
+    incomingRequests,
+    respondToRequest,
   } = useChat();
   const router = useRouter();
 
@@ -152,6 +156,64 @@ export function Sidebar() {
 
         {/* Conversations List */}
         <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+          {/* Pending Connection Requests Banner in Sidebar */}
+          {incomingRequests.length > 0 && (
+            <div className="space-y-1.5 mb-2">
+              <div className="flex items-center justify-between px-1 text-[11px] font-semibold text-primary">
+                <span className="flex items-center gap-1">
+                  <Bell className="w-3 h-3 text-rose-500 animate-bounce" />
+                  Connection Requests ({incomingRequests.length})
+                </span>
+              </div>
+
+              {incomingRequests.map(req => {
+                const duoIdText = formatDuoId(req.sender as any);
+                return (
+                  <div
+                    key={req.id}
+                    className="p-2.5 rounded-2xl bg-gradient-to-r from-rose-500/10 via-primary/10 to-pink-500/10 border border-primary/25 space-y-2 shadow-xs"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Avatar
+                        src={req.sender.avatar_path || undefined}
+                        name={req.sender.display_name}
+                        size="sm"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-foreground truncate">
+                          {req.sender.display_name}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground font-mono truncate">
+                          {duoIdText}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 pt-0.5">
+                      <Button
+                        size="sm"
+                        onClick={() => respondToRequest(req.id, 'accept')}
+                        className="flex-1 h-7 rounded-xl text-[11px] gap-1 font-medium bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer"
+                      >
+                        <Check className="w-3 h-3" />
+                        <span>Accept</span>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => respondToRequest(req.id, 'decline')}
+                        className="h-7 px-2.5 rounded-xl text-[11px] gap-1 border-border/80 text-muted-foreground hover:text-foreground cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                        <span>Decline</span>
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {filteredConversations.length === 0 ? (
             <div className="p-6 text-center text-muted-foreground space-y-2">
               <div className="w-10 h-10 rounded-full bg-primary/10 text-primary mx-auto flex items-center justify-center">
