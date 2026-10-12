@@ -46,11 +46,6 @@ function LoginForm() {
     const cleanEmail = data.email.trim();
     setAttemptedEmail(cleanEmail);
 
-    if (!isConfigured) {
-      setAuthError('Authentication service is not configured. Please contact support.');
-      setIsLoading(false);
-      return;
-    }
 
     try {
       const supabase = getSupabaseBrowserClient();

@@ -29,13 +29,6 @@ export default function ForgotPasswordPage() {
     setIsLoading(true);
     setErrorMessage(null);
 
-    if (!isSupabaseConfigured()) {
-      setTimeout(() => {
-        setIsLoading(false);
-        setIsSent(true);
-      }, 500);
-      return;
-    }
 
     try {
       const supabase = getSupabaseBrowserClient();

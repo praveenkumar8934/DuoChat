@@ -32,13 +32,6 @@ export default function ResetPasswordPage() {
     setIsLoading(true);
     setErrorMessage(null);
 
-    if (!isSupabaseConfigured()) {
-      setTimeout(() => {
-        setIsLoading(false);
-        setIsSuccess(true);
-      }, 500);
-      return;
-    }
 
     try {
       const supabase = getSupabaseBrowserClient();

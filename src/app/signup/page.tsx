@@ -64,11 +64,6 @@ function SignupForm() {
     setAuthError(null);
     setIsAlreadyRegistered(false);
 
-    if (!isSupabaseConfigured()) {
-      setAuthError('Authentication service is not configured. Please contact support.');
-      setIsLoading(false);
-      return;
-    }
 
     try {
       const supabase = getSupabaseBrowserClient();
