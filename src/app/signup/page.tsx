@@ -64,10 +64,67 @@ function SignupForm() {
     setAuthError(null);
     setIsAlreadyRegistered(false);
 
-
     try {
-      const supabase = getSupabaseBrowserClient();
       const cleanEmail = data.email.trim();
+
+      // 1. Server-side registration (supports 100 signups/sec and bypasses Supabase email rate limits)
+      let serverCreated = false;
+      try {
+        const res = await fetch('/api/auth/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: cleanEmail,
+            password: data.password,
+            displayName: data.displayName.trim(),
+            username: data.username.toLowerCase().trim(),
+          }),
+        });
+
+        const resData = await res.json();
+        if (res.ok && resData.success) {
+          serverCreated = true;
+        } else if (resData.error) {
+          const lowerMsg = (resData.error || '').toLowerCase();
+          if (
+            lowerMsg.includes('already registered') ||
+            lowerMsg.includes('already in use') ||
+            lowerMsg.includes('already exists')
+          ) {
+            setIsAlreadyRegistered(true);
+            setAuthError('An account with this email already exists. Please sign in instead.');
+            setIsLoading(false);
+            return;
+          } else if (res.status === 429) {
+            setAuthError(resData.error || 'Rate limit exceeded (100 req/sec max). Please slow down.');
+            setIsLoading(false);
+            return;
+          }
+        }
+      } catch {
+        // Fallback to client-side signUp if network interrupted
+      }
+
+      const supabase = getSupabaseBrowserClient();
+
+      if (serverCreated) {
+        // Automatically sign in now that account is confirmed
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password: data.password,
+        });
+
+        if (!signInError) {
+          router.push('/chat');
+          return;
+        }
+
+        setSignupSuccess(true);
+        setIsLoading(false);
+        return;
+      }
+
+      // 2. Client-side fallback if server-side signup was bypassed
       const { data: authData, error } = await supabase.auth.signUp({
         email: cleanEmail,
         password: data.password,
