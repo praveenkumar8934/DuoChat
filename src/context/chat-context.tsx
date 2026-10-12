@@ -11,14 +11,8 @@ import {
   UserPresence,
   MessageReaction,
 } from '@/types/database';
-import {
-  DEMO_CONVERSATION,
-  DEMO_MESSAGES,
-  DEMO_CURRENT_USER,
-  DEMO_FRIEND_USER,
-} from '@/lib/mock-data';
 
-interface ChatContextType {
+export interface ChatContextType {
   conversations: ConversationWithDetails[];
   activeConversationId: string | null;
   activeConversation: ConversationWithDetails | null;
@@ -48,6 +42,7 @@ interface ChatContextType {
   broadcastTyping: (isTyping: boolean) => void;
   markConversationAsRead: (conversationId: string) => Promise<void>;
   refreshConversations: () => Promise<void>;
+  connectWithPartner: (identifier: string) => Promise<{ success: boolean; conversationId?: string; error?: string }>;
 }
 
 const ChatContext = createContext<ChatContextType | null>(null);
@@ -64,9 +59,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [isMediaDrawerOpen, setIsMediaDrawerOpen] = useState(false);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [friendPresence, setFriendPresence] = useState<UserPresence>({
-    userId: 'usr_sarah_002',
-    online: true,
-    lastSeen: '2026-10-12T12:00:00.000Z',
+    userId: '',
+    online: false,
+    lastSeen: new Date().toISOString(),
   });
 
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -75,15 +70,55 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   // Active conversation object
   const activeConversation = conversations.find(c => c.id === activeConversationId) || null;
 
+  // Sync friend presence from active conversation's partner
+  useEffect(() => {
+    if (activeConversation?.otherUser) {
+      setFriendPresence({
+        userId: activeConversation.otherUser.id,
+        online: true,
+        lastSeen: activeConversation.otherUser.last_seen_at || new Date().toISOString(),
+      });
+    } else {
+      setFriendPresence({
+        userId: '',
+        online: false,
+        lastSeen: new Date().toISOString(),
+      });
+    }
+  }, [activeConversation]);
+
+  // Connect with a partner via Duo ID or username
+  const connectWithPartner = useCallback(
+    async (identifier: string) => {
+      try {
+        const res = await fetch('/api/connect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          return { success: false, error: data.error || 'Failed to connect' };
+        }
+
+        await refreshConversations();
+        if (data.conversationId) {
+          setActiveConversationId(data.conversationId);
+        }
+        return { success: true, conversationId: data.conversationId };
+      } catch (err: any) {
+        return { success: false, error: err?.message || 'Network error' };
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
   // Load conversations
   const refreshConversations = useCallback(async () => {
-    if (!profile) return;
-
-    if (!isConfigured) {
-      setConversations([DEMO_CONVERSATION]);
-      if (!activeConversationId) {
-        setActiveConversationId(DEMO_CONVERSATION.id);
-      }
+    if (!profile) {
+      setConversations([]);
+      setActiveConversationId(null);
       return;
     }
 
@@ -107,9 +142,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       if (memberErr || !memberRows) {
         const errDetail = memberErr ? (memberErr.message || memberErr.code || JSON.stringify(memberErr)) : 'No data';
         console.warn('Unable to fetch member rows from database:', errDetail);
-        // Graceful fallback to demo conversation so UI remains interactive
-        setConversations(prev => (prev.length === 0 ? [DEMO_CONVERSATION] : prev));
-        setActiveConversationId(prev => prev || DEMO_CONVERSATION.id);
+        setConversations([]);
         return;
       }
 
@@ -181,13 +214,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   // Load messages for active conversation
   const loadMessages = useCallback(async (conversationId: string) => {
-    setIsLoadingMessages(true);
-
-    if (!isConfigured) {
-      setMessages(DEMO_MESSAGES);
-      setIsLoadingMessages(false);
+    if (!conversationId) {
+      setMessages([]);
       return;
     }
+    setIsLoadingMessages(true);
 
     try {
       const supabase = getSupabaseBrowserClient();
@@ -206,9 +237,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       if (error) {
         const errDetail = error.message || error.code || JSON.stringify(error);
         console.warn('Unable to fetch messages from database:', errDetail);
-        if (conversationId === DEMO_CONVERSATION.id || !messages.length) {
-          setMessages(DEMO_MESSAGES);
-        }
+        setMessages([]);
       } else if (data) {
         const enriched: MessageWithDetails[] = await Promise.all(
           data.map(async (msg: any) => {
@@ -527,65 +556,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setMessages(prev => [...prev, optimisticMessage]);
     setReplyingTo(null);
 
-    if (!isConfigured) {
-      // Demo mode: simulate network delivery
-      setTimeout(() => {
-        setMessages(prev =>
-          prev.map(m => (m.id === optimisticId ? { ...m, deliveryStatus: 'sent' } : m))
-        );
-      }, 500);
-
-      setTimeout(() => {
-        setMessages(prev =>
-          prev.map(m => (m.id === optimisticId ? { ...m, deliveryStatus: 'delivered' } : m))
-        );
-      }, 1200);
-
-      setTimeout(() => {
-        setMessages(prev =>
-          prev.map(m => (m.id === optimisticId ? { ...m, deliveryStatus: 'read' } : m))
-        );
-      }, 2500);
-
-      // Simulate a smart friend reply in demo mode
-      setTimeout(() => {
-        setTypingUsers([DEMO_FRIEND_USER.display_name]);
-      }, 3500);
-
-      setTimeout(() => {
-        setTypingUsers([]);
-        const replies = [
-          'Sounds fantastic! Excited for this.',
-          'Love this so much! Let me save it.',
-          'Got it! Looking over it right now.',
-          'This is why DuoChat is so much better than cluttered apps.',
-        ];
-        const randomReply = replies[Math.floor(Math.random() * replies.length)];
-        const friendMsg: MessageWithDetails = {
-          id: `msg_demo_${Date.now()}`,
-          conversation_id: activeConversationId,
-          sender_id: DEMO_FRIEND_USER.id,
-          sender: DEMO_FRIEND_USER,
-          message_type: 'text',
-          body: randomReply,
-          storage_path: null,
-          original_filename: null,
-          mime_type: null,
-          file_size: null,
-          duration_seconds: null,
-          reply_to_message_id: optimisticId,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          edited_at: null,
-          deleted_at: null,
-          deliveryStatus: 'read',
-          reactions: [],
-          receipts: [],
-        };
-        setMessages(prev => [...prev, friendMsg]);
-      }, 6000);
-
-      return {};
+    if (!activeConversationId) {
+      return { error: 'No conversation selected' };
     }
 
     try {
@@ -819,6 +791,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         broadcastTyping,
         markConversationAsRead,
         refreshConversations,
+        connectWithPartner,
       }}
     >
       {children}

@@ -16,6 +16,8 @@ import {
   Heart,
   FolderHeart,
   CalendarHeart,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { useChat } from '@/context/chat-context';
@@ -26,6 +28,7 @@ import { BrandLogo } from '@/components/ui/brand-logo';
 import { InviteModal } from './invite-modal';
 import { formatMessageTime, cn } from '@/lib/utils';
 import { useRomanticFeatures } from '@/lib/romantic-features';
+import { formatDuoId } from '@/lib/duo-id';
 
 export function Sidebar() {
   const { profile, signOut, isConfigured } = useAuth();
@@ -41,6 +44,17 @@ export function Sidebar() {
   const { daysTogether } = useRomanticFeatures();
   const [isInviteOpen, setIsInviteOpen] = React.useState(false);
   const [filterText, setFilterText] = React.useState('');
+  const [copiedId, setCopiedId] = React.useState(false);
+
+  const duoId = formatDuoId(profile);
+
+  const handleCopyDuoId = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    navigator.clipboard.writeText(duoId);
+    setCopiedId(true);
+    setTimeout(() => setCopiedId(false), 2000);
+  };
 
   const filteredConversations = conversations.filter(c => {
     if (!filterText) return true;
@@ -79,13 +93,13 @@ export function Sidebar() {
 
             <Button
               size="sm"
-              variant="ghost"
+              variant="outline"
               onClick={() => setIsInviteOpen(true)}
-              className="rounded-xl text-xs gap-1.5 text-primary hover:bg-primary/10 hover:text-primary transition-colors cursor-pointer"
-              title="Invite partner"
+              className="rounded-xl text-xs gap-1.5 border-primary/20 bg-primary/5 text-primary hover:bg-primary/15 hover:text-primary transition-all cursor-pointer font-medium"
+              title="Connect partner"
             >
               <UserPlus className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline font-medium">Invite</span>
+              <span>Connect</span>
             </Button>
           </div>
 
@@ -140,16 +154,16 @@ export function Sidebar() {
               </div>
               <p className="text-xs font-medium text-foreground">No conversations yet</p>
               <p className="text-[11px] text-muted-foreground max-w-[200px] mx-auto">
-                Invite your favorite person to build your private world together.
+                Share your unique Duo ID or enter your partner's ID to start chatting.
               </p>
               <Button
-                variant="outline"
+                variant="default"
                 size="sm"
                 onClick={() => setIsInviteOpen(true)}
-                className="mt-2 text-xs rounded-xl"
+                className="mt-2 text-xs rounded-xl shadow-sm"
               >
                 <UserPlus className="w-3.5 h-3.5 mr-1.5" />
-                Invite Partner
+                Connect Partner
               </Button>
             </div>
           ) : (
@@ -222,7 +236,7 @@ export function Sidebar() {
         </div>
 
         {/* User Footer Profile & Controls */}
-        <div className="p-3 border-t border-border/60 bg-card/40 flex items-center justify-between">
+        <div className="p-3 border-t border-border/60 bg-card/40 flex items-center justify-between gap-1">
           <Link
             href="/settings/profile"
             className="flex items-center gap-2.5 min-w-0 p-1.5 rounded-xl hover:bg-muted/70 transition-colors flex-1"
@@ -236,17 +250,27 @@ export function Sidebar() {
               <p className="text-xs font-semibold truncate text-foreground leading-tight">
                 {profile?.display_name || 'My Profile'}
               </p>
-              <p className="text-[10px] text-muted-foreground font-mono truncate">
-                @{profile?.username || 'me'}
-              </p>
+              <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono truncate">
+                <span className="text-primary font-medium">{duoId}</span>
+              </div>
             </div>
           </Link>
 
-          <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={handleCopyDuoId}
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0 cursor-pointer"
+            title="Copy your Duo ID"
+            aria-label="Copy Duo ID"
+          >
+            {copiedId ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+          </button>
+
+          <div className="flex items-center gap-0.5 shrink-0">
             <ThemeToggle />
             <Link
               href="/settings/profile"
-              className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              className="p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               title="Settings & Preferences"
               aria-label="Settings"
             >
@@ -254,7 +278,7 @@ export function Sidebar() {
             </Link>
             <button
               onClick={handleSignOut}
-              className="p-2 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+              className="p-1.5 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
               title="Sign out"
               aria-label="Sign out"
             >

@@ -5,7 +5,6 @@ import { User } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { isSupabaseConfigured } from '@/lib/env';
 import { Profile } from '@/types/database';
-import { DEMO_CURRENT_USER } from '@/lib/mock-data';
 
 interface AuthContextType {
   user: User | null;
@@ -35,7 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loadProfile = useCallback(async (userId: string) => {
     if (!isConfigured) {
-      setProfile(DEMO_CURRENT_USER);
+      setProfile(null);
       return;
     }
 
@@ -48,27 +47,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (error) {
-        console.error('Error fetching profile:', error);
+        console.warn('Error fetching profile:', error.message || error);
       } else if (data) {
         setProfile(data as Profile);
       }
     } catch (err) {
-      console.error('Failed to load profile:', err);
+      console.warn('Failed to load profile:', err);
     }
   }, [isConfigured]);
 
   useEffect(() => {
     if (!isConfigured) {
-      // In demo mode, load demo user
-      setUser({
-        id: DEMO_CURRENT_USER.id,
-        email: 'alex@duochat.local',
-        app_metadata: {},
-        user_metadata: { display_name: DEMO_CURRENT_USER.display_name },
-        aud: 'authenticated',
-        created_at: DEMO_CURRENT_USER.created_at,
-      } as User);
-      setProfile(DEMO_CURRENT_USER);
+      setUser(null);
+      setProfile(null);
       setIsLoading(false);
       return;
     }
