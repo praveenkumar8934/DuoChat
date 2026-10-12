@@ -35,12 +35,8 @@ export default function InviteAcceptClient({ token }: { token: string }) {
     setErrorMessage(null);
 
     if (!isConfigured) {
-      setTimeout(async () => {
-        setIsLoading(false);
-        setSuccessConversationId('conv_duo_777');
-        await refreshConversations();
-        router.push('/chat');
-      }, 700);
+      setErrorMessage('Database connection is not configured.');
+      setIsLoading(false);
       return;
     }
 

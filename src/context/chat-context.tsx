@@ -281,6 +281,43 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
   }, [profile, refreshConversations]);
 
+  // Realtime subscription for incoming connections and messages across all conversations
+  useEffect(() => {
+    if (!isConfigured || !profile) return;
+
+    const supabase = getSupabaseBrowserClient();
+    const userChannel = supabase
+      .channel(`user-sync:${profile.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversation_members',
+          filter: `user_id=eq.${profile.id}`,
+        },
+        () => {
+          refreshConversations();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+        },
+        () => {
+          refreshConversations();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      userChannel.unsubscribe();
+    };
+  }, [isConfigured, profile, refreshConversations]);
+
   // Handle active conversation change
   useEffect(() => {
     if (activeConversationId) {
@@ -470,16 +507,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     (isTyping: boolean) => {
       if (!profile) return;
 
-      if (!isConfigured) {
-        if (isTyping) {
-          // In demo mode, trigger a playful auto response if user wants to see typing
-          if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-          typingTimeoutRef.current = setTimeout(() => {
-            setTypingUsers([]);
-          }, 3000);
-        }
-        return;
-      }
+      if (!isConfigured) return;
 
       if (channelRef.current) {
         channelRef.current.send({

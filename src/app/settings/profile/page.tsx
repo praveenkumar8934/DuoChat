@@ -215,7 +215,7 @@ export default function ProfileSettingsPage() {
             <div className="min-w-0">
               <span className="text-[11px] text-muted-foreground block">System UUID</span>
               <span className="font-mono text-xs text-foreground truncate block">
-                {profile?.id || 'usr_anonymous'}
+                {profile?.id || '—'}
               </span>
             </div>
             <button

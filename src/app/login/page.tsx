@@ -68,10 +68,6 @@ function LoginForm() {
     }
   };
 
-  const fillDemoAccount = () => {
-    setValue('email', 'alex@duochat.local');
-    setValue('password', 'SecretPassword123');
-  };
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground selection:bg-rose-500/20">
@@ -103,26 +99,6 @@ function LoginForm() {
               </div>
             )}
 
-            {!isConfigured && (
-              <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-700 dark:text-rose-300 flex items-start justify-between gap-2">
-                <div>
-                  <p className="font-semibold flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    Preview Mode Active
-                  </p>
-                  <p className="text-[11px] mt-0.5 opacity-90">
-                    Supabase keys are not set yet. You can sign in with any email to explore!
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={fillDemoAccount}
-                  className="shrink-0 text-[11px] underline font-medium hover:opacity-80 cursor-pointer"
-                >
-                  Fill Demo
-                </button>
-              </div>
-            )}
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div className="space-y-1.5">
