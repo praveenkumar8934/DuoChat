@@ -39,7 +39,7 @@ export async function POST(req: Request) {
     }
 
     // 2. Prepare database client
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const serviceKey = env.supabaseServiceRoleKey;
     if (!serviceKey || !env.supabaseUrl) {
       return NextResponse.json(
         { error: 'Server configuration missing. Check SUPABASE_SERVICE_ROLE_KEY.' },

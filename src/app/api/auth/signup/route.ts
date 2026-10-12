@@ -45,7 +45,7 @@ export async function POST(req: Request) {
     const cleanUsername = username.trim().toLowerCase();
     const cleanDisplayName = displayName.trim();
 
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const serviceKey = env.supabaseServiceRoleKey;
     if (!serviceKey || !env.supabaseUrl) {
       return NextResponse.json(
         { error: 'server_config', message: 'Server configuration missing. Check SUPABASE_SERVICE_ROLE_KEY.' },
