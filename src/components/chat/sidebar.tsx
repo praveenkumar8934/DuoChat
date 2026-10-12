@@ -97,7 +97,7 @@ export function Sidebar() {
             <BrandLogo size="md" />
 
             <div className="flex items-center gap-1.5">
-              <NotificationBell />
+              <NotificationBell onOpenConnect={() => setIsInviteOpen(true)} />
 
               <Button
                 size="sm"

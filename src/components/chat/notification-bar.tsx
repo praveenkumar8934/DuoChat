@@ -11,32 +11,142 @@ import {
   Heart,
   Clock,
   Loader2,
+  Users,
+  MessageSquare,
+  Copy,
+  CheckCheck,
+  UserPlus,
+  CheckCircle2,
 } from 'lucide-react';
+import { useAuth } from '@/context/auth-context';
 import { useChat } from '@/context/chat-context';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/toast';
 import { formatDuoId } from '@/lib/duo-id';
 import { cn } from '@/lib/utils';
+import type { Profile } from '@/types/database';
 
-export function NotificationBell() {
-  const { incomingRequests, respondToRequest } = useChat();
+export interface NotificationBellProps {
+  onOpenConnect?: () => void;
+  className?: string;
+}
+
+export function NotificationBell({ onOpenConnect, className }: NotificationBellProps) {
+  const { profile } = useAuth();
+  const {
+    conversations,
+    incomingRequests,
+    respondToRequest,
+    setActiveConversationId,
+    friendPresence,
+  } = useChat();
+
   const [isOpen, setIsOpen] = React.useState(false);
+  const [activeTab, setActiveTab] = React.useState<'friends' | 'requests'>('requests');
   const [processingId, setProcessingId] = React.useState<string | null>(null);
-  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [copiedMyId, setCopiedMyId] = React.useState(false);
+  const [coords, setCoords] = React.useState<{ top: number; left: number; width: number } | null>(null);
 
-  // Close dropdown on outside click
+  const buttonRef = React.useRef<HTMLButtonElement>(null);
+  const popoverRef = React.useRef<HTMLDivElement>(null);
+
+  const requestCount = incomingRequests.length;
+
+  // Extract confirmed friends from conversations list
+  const friends = React.useMemo(() => {
+    const list: Array<{
+      conversationId: string;
+      friend: Profile;
+      lastMessageTime?: string;
+    }> = [];
+    const seen = new Set<string>();
+
+    for (const conv of conversations) {
+      if (conv.otherUser && !seen.has(conv.otherUser.id)) {
+        seen.add(conv.otherUser.id);
+        list.push({
+          conversationId: conv.id,
+          friend: conv.otherUser,
+          lastMessageTime: conv.lastMessage?.created_at,
+        });
+      }
+    }
+    return list;
+  }, [conversations]);
+
+  // Set default tab when opening: if there are pending requests, show 'requests', else 'friends'
   React.useEffect(() => {
+    if (isOpen) {
+      if (requestCount > 0) {
+        setActiveTab('requests');
+      } else {
+        setActiveTab('friends');
+      }
+    }
+  }, [isOpen, requestCount]);
+
+  // Calculate clamped viewport position so no part of the popover goes outside the display
+  const calculatePosition = React.useCallback(() => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const screenWidth = typeof window !== 'undefined' ? window.innerWidth : 1024;
+    const screenHeight = typeof window !== 'undefined' ? window.innerHeight : 768;
+
+    // Desired popover width: responsive width that fits mobile and desktop comfortably
+    const width = Math.min(390, screenWidth - 24);
+
+    // Calculate left position:
+    // Try aligning to button's left edge, or right edge if close to right screen boundary
+    let left = rect.left;
+    if (left + width > screenWidth - 12) {
+      left = screenWidth - 12 - width;
+    }
+    if (left < 12) {
+      left = 12;
+    }
+
+    // Calculate top position:
+    let top = rect.bottom + 8;
+    // If overflowing screen bottom and room exists above, open upwards
+    if (top + 380 > screenHeight && rect.top > 380) {
+      top = Math.max(12, rect.top - 440);
+    }
+
+    setCoords({ top, left, width });
+  }, []);
+
+  // Window resize, scroll, and outside click listeners
+  React.useEffect(() => {
+    if (!isOpen) return;
+    calculatePosition();
+
+    function handleResizeOrScroll() {
+      calculatePosition();
+    }
+
     function handleClickOutside(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(target) &&
+        buttonRef.current &&
+        !buttonRef.current.contains(target)
+      ) {
         setIsOpen(false);
       }
     }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
-  const count = incomingRequests.length;
+    window.addEventListener('resize', handleResizeOrScroll);
+    window.addEventListener('scroll', handleResizeOrScroll, true);
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      window.removeEventListener('resize', handleResizeOrScroll);
+      window.removeEventListener('scroll', handleResizeOrScroll, true);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen, calculatePosition]);
 
   const handleAction = async (requestId: string, action: 'accept' | 'decline', senderName: string) => {
     setProcessingId(requestId);
@@ -44,8 +154,8 @@ export function NotificationBell() {
       const res = await respondToRequest(requestId, action);
       if (res.success) {
         if (action === 'accept') {
-          toast.success(`You are now connected with ${senderName}!`);
-          setIsOpen(false);
+          toast.success(`You are now connected with ${senderName}! Added to your friend list.`);
+          setActiveTab('friends');
         } else {
           toast.info(`Request from ${senderName} declined.`);
         }
@@ -59,128 +169,348 @@ export function NotificationBell() {
     }
   };
 
+  const handleOpenChat = (conversationId: string) => {
+    setActiveConversationId(conversationId);
+    setIsOpen(false);
+  };
+
+  const handleCopyMyDuoId = () => {
+    if (!profile) return;
+    const text = formatDuoId(profile);
+    navigator.clipboard.writeText(text);
+    setCopiedMyId(true);
+    toast.success('Duo ID copied to clipboard!');
+    setTimeout(() => setCopiedMyId(false), 2000);
+  };
+
   return (
-    <div className="relative" ref={containerRef}>
+    <div className="relative inline-block">
+      {/* Bell Trigger Button */}
       <button
+        ref={buttonRef}
+        type="button"
         onClick={() => setIsOpen(prev => !prev)}
         className={cn(
           'relative p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-all cursor-pointer border border-transparent',
           isOpen && 'bg-muted/80 text-foreground border-border/50',
-          count > 0 && 'text-primary'
+          requestCount > 0 && 'text-primary',
+          className
         )}
-        title={count > 0 ? `${count} pending connection request${count > 1 ? 's' : ''}` : 'Notifications'}
+        title={
+          requestCount > 0
+            ? `${requestCount} pending connection request${requestCount > 1 ? 's' : ''}`
+            : 'Notifications & Friends'
+        }
+        aria-label="Open notifications"
       >
         <Bell className="w-4 h-4" />
-        {count > 0 && (
+        {requestCount > 0 && (
           <span className="absolute -top-1 -right-1 flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white shadow-xs animate-bounce">
-            {count}
+            {requestCount}
           </span>
         )}
       </button>
 
-      {/* Popover Dropdown */}
+      {/* Popover Dropdown Window with Clamped Boundary */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-card border border-border/80 shadow-2xl z-50 overflow-hidden backdrop-blur-md animate-in fade-in-0 zoom-in-95">
-          {/* Header */}
-          <div className="p-3.5 border-b border-border/60 bg-muted/30 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-primary" />
-              <h3 className="text-xs font-semibold text-foreground">Partner Requests</h3>
-              {count > 0 && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 text-primary">
-                  {count} new
-                </span>
-              )}
-            </div>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="text-muted-foreground hover:text-foreground p-1 rounded-lg text-xs"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
+        <>
+          {/* Backdrop on mobile for easy dismissal */}
+          <div
+            className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px] sm:hidden"
+            onClick={() => setIsOpen(false)}
+          />
 
-          {/* Request List */}
-          <div className="max-h-80 overflow-y-auto p-2 space-y-2">
-            {count === 0 ? (
-              <div className="py-8 px-4 text-center space-y-2">
-                <div className="w-10 h-10 rounded-full bg-muted/60 text-muted-foreground mx-auto flex items-center justify-center">
-                  <Heart className="w-4 h-4 opacity-50" />
+          <div
+            ref={popoverRef}
+            style={{
+              position: 'fixed',
+              top: coords ? `${coords.top}px` : '72px',
+              left: coords ? `${coords.left}px` : '12px',
+              width: coords ? `${coords.width}px` : 'calc(100vw - 24px)',
+              maxHeight: coords ? `min(540px, calc(100vh - ${coords.top + 16}px))` : '500px',
+            }}
+            className="fixed z-50 rounded-2xl bg-card/95 border border-border/80 shadow-2xl overflow-hidden backdrop-blur-xl flex flex-col animate-in fade-in-0 zoom-in-95 duration-150 select-none"
+          >
+            {/* Window Header */}
+            <div className="p-3 border-b border-border/60 bg-muted/40 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                  <Sparkles className="w-3.5 h-3.5" />
                 </div>
-                <p className="text-xs font-medium text-foreground">No pending requests</p>
-                <p className="text-[11px] text-muted-foreground max-w-[220px] mx-auto">
-                  When someone enters your Duo ID or username, their request will appear here.
-                </p>
+                <div>
+                  <h3 className="text-xs font-semibold text-foreground leading-tight">Partner Hub</h3>
+                  <p className="text-[10px] text-muted-foreground">Friends & Connection Requests</p>
+                </div>
               </div>
-            ) : (
-              incomingRequests.map(req => {
-                const isBusy = processingId === req.id;
-                const duoIdText = formatDuoId(req.sender as any);
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-lg text-xs hover:bg-muted transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-                return (
-                  <div
-                    key={req.id}
-                    className="p-3 rounded-xl bg-background/90 border border-border/60 space-y-2.5 transition-all hover:border-primary/30"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Avatar
-                        src={req.sender.avatar_path || undefined}
-                        name={req.sender.display_name}
-                        size="md"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-semibold text-foreground truncate">
-                            {req.sender.display_name}
-                          </p>
-                          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                            <Clock className="w-2.5 h-2.5" />
-                            Recent
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-muted-foreground font-mono truncate">
-                          {duoIdText}
-                          {req.sender.username && ` • @${req.sender.username}`}
+            {/* Section Switcher Tabs: 1) Friends, 2) Requests */}
+            <div className="p-2 border-b border-border/50 bg-muted/20">
+              <div className="grid grid-cols-2 p-1 rounded-xl bg-muted/60 text-xs font-medium gap-1">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('friends')}
+                  className={cn(
+                    'flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-medium transition-all cursor-pointer',
+                    activeTab === 'friends'
+                      ? 'bg-background text-foreground shadow-xs'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-background/40'
+                  )}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Friends</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-primary/10 text-primary font-bold">
+                    {friends.length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('requests')}
+                  className={cn(
+                    'flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-medium transition-all cursor-pointer',
+                    activeTab === 'requests'
+                      ? 'bg-background text-foreground shadow-xs'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-background/40'
+                  )}
+                >
+                  <UserCheck className="w-3.5 h-3.5" />
+                  <span>Requests</span>
+                  {requestCount > 0 ? (
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-500 text-white font-bold animate-pulse">
+                      {requestCount} new
+                    </span>
+                  ) : (
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-muted text-muted-foreground">
+                      0
+                    </span>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable Content Body */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-2.5 min-h-[180px]">
+              {/* SECTION 1: FRIENDS */}
+              {activeTab === 'friends' && (
+                <>
+                  {friends.length === 0 ? (
+                    <div className="py-10 px-4 text-center space-y-3">
+                      <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary mx-auto flex items-center justify-center">
+                        <Users className="w-6 h-6 opacity-80" />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs font-semibold text-foreground">No confirmed friends yet</p>
+                        <p className="text-[11px] text-muted-foreground max-w-[240px] mx-auto leading-relaxed">
+                          When a partner accepts your connection request, they will appear here in your friends list.
                         </p>
-                        <p className="text-[11px] text-primary/80 italic font-serif mt-0.5">
-                          wants to connect with you
+                      </div>
+                      {onOpenConnect && (
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            setIsOpen(false);
+                            onOpenConnect();
+                          }}
+                          className="rounded-xl text-xs gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs cursor-pointer"
+                        >
+                          <UserPlus className="w-3.5 h-3.5" />
+                          <span>Connect Partner</span>
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-[11px] font-semibold text-muted-foreground px-1">
+                        <span>Connected Partners ({friends.length})</span>
+                      </div>
+
+                      {friends.map(({ conversationId, friend }) => {
+                        const isFriendOnline =
+                          friendPresence.userId === friend.id ? friendPresence.online : false;
+                        const duoIdText = formatDuoId(friend);
+
+                        return (
+                          <div
+                            key={friend.id}
+                            className="p-2.5 rounded-xl bg-background/80 border border-border/60 hover:border-primary/40 transition-all flex items-center justify-between gap-3 shadow-xs"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <Avatar
+                                src={friend.avatar_path || undefined}
+                                name={friend.display_name}
+                                size="md"
+                                isOnline={isFriendOnline}
+                              />
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-foreground truncate">
+                                  {friend.display_name}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground font-mono truncate">
+                                  {duoIdText}
+                                  {friend.username && ` • @${friend.username}`}
+                                </p>
+                                <span className="inline-flex items-center gap-1 text-[10px] mt-0.5">
+                                  <span
+                                    className={cn(
+                                      'w-1.5 h-1.5 rounded-full',
+                                      isFriendOnline ? 'bg-emerald-500' : 'bg-muted-foreground/50'
+                                    )}
+                                  />
+                                  <span className="text-muted-foreground">
+                                    {isFriendOnline ? 'Online now' : 'Offline'}
+                                  </span>
+                                </span>
+                              </div>
+                            </div>
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleOpenChat(conversationId)}
+                              className="h-7 px-2.5 rounded-lg text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10 hover:text-primary shrink-0 cursor-pointer"
+                              title={`Chat with ${friend.display_name}`}
+                            >
+                              <MessageSquare className="w-3 h-3" />
+                              <span>Chat</span>
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* SECTION 2: REQUESTS */}
+              {activeTab === 'requests' && (
+                <>
+                  {requestCount === 0 ? (
+                    <div className="py-10 px-4 text-center space-y-3">
+                      <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 mx-auto flex items-center justify-center">
+                        <CheckCircle2 className="w-6 h-6 opacity-80" />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs font-semibold text-foreground">No pending requests</p>
+                        <p className="text-[11px] text-muted-foreground max-w-[240px] mx-auto leading-relaxed">
+                          When someone sends a connection request using your Duo ID, it will appear right here in real time.
                         </p>
                       </div>
                     </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between text-[11px] font-semibold text-primary px-1">
+                        <span>Incoming Partner Requests ({requestCount})</span>
+                      </div>
 
-                    {/* Action Buttons */}
-                    <div className="flex items-center gap-2 pt-1 border-t border-border/40">
-                      <Button
-                        size="sm"
-                        disabled={isBusy}
-                        onClick={() => handleAction(req.id, 'accept', req.sender.display_name)}
-                        className="flex-1 h-8 rounded-xl text-xs gap-1.5 font-medium bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-xs cursor-pointer"
-                      >
-                        {isBusy ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Check className="w-3.5 h-3.5" />
-                        )}
-                        <span>Accept</span>
-                      </Button>
+                      {incomingRequests.map(req => {
+                        const isBusy = processingId === req.id;
+                        const duoIdText = formatDuoId(req.sender as any);
 
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={isBusy}
-                        onClick={() => handleAction(req.id, 'decline', req.sender.display_name)}
-                        className="flex-1 h-8 rounded-xl text-xs gap-1.5 border-border hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                        <span>Decline</span>
-                      </Button>
+                        return (
+                          <div
+                            key={req.id}
+                            className="p-3 rounded-xl bg-gradient-to-r from-rose-500/5 via-primary/5 to-pink-500/5 border border-primary/25 space-y-2.5 shadow-xs transition-all hover:border-primary/40"
+                          >
+                            <div className="flex items-center gap-3">
+                              <Avatar
+                                src={req.sender.avatar_path || undefined}
+                                name={req.sender.display_name}
+                                size="md"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-xs font-semibold text-foreground truncate">
+                                    {req.sender.display_name}
+                                  </p>
+                                  <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                    <Clock className="w-2.5 h-2.5" />
+                                    Recent
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-muted-foreground font-mono truncate">
+                                  {duoIdText}
+                                  {req.sender.username && ` • @${req.sender.username}`}
+                                </p>
+                                <p className="text-[11px] text-primary font-medium italic mt-0.5">
+                                  wants to connect with you
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Accept / Decline Action Buttons */}
+                            <div className="flex items-center gap-2 pt-1 border-t border-border/50">
+                              <Button
+                                size="sm"
+                                disabled={isBusy}
+                                onClick={() => handleAction(req.id, 'accept', req.sender.display_name)}
+                                className="flex-1 h-8 rounded-xl text-xs gap-1.5 font-medium bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer"
+                              >
+                                {isBusy ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Check className="w-3.5 h-3.5" />
+                                )}
+                                <span>Accept</span>
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isBusy}
+                                onClick={() => handleAction(req.id, 'decline', req.sender.display_name)}
+                                className="flex-1 h-8 rounded-xl text-xs gap-1.5 border-border hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                                <span>Decline</span>
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  </div>
-                );
-              })
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Window Footer: Quick Duo-ID Share Tool */}
+            {profile && (
+              <div className="p-2.5 bg-muted/40 border-t border-border/60 flex items-center justify-between gap-2 text-[11px]">
+                <div className="truncate">
+                  <span className="text-muted-foreground">Your Duo ID: </span>
+                  <span className="font-mono font-semibold text-primary">{formatDuoId(profile)}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopyMyDuoId}
+                  className="px-2 py-1 rounded-lg bg-background hover:bg-primary/10 border border-border/60 text-muted-foreground hover:text-primary transition-all flex items-center gap-1 cursor-pointer shrink-0 font-medium"
+                  title="Copy your Duo ID to share with friends"
+                >
+                  {copiedMyId ? (
+                    <>
+                      <CheckCheck className="w-3 h-3 text-emerald-500" />
+                      <span className="text-emerald-500 text-[10px]">Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3" />
+                      <span className="text-[10px]">Copy ID</span>
+                    </>
+                  )}
+                </button>
+              </div>
             )}
           </div>
-        </div>
+        </>
       )}
     </div>
   );
