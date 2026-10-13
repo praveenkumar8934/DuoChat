@@ -13,16 +13,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { BrandLogo } from '@/components/ui/brand-logo';
+import { GoogleSignInButton } from '@/components/auth/google-sign-in-button';
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get('redirectTo') || '/chat';
   const initialEmail = searchParams.get('email') || '';
+  const initialError = searchParams.get('error_description') || searchParams.get('error') || null;
   const { isConfigured } = useAuth();
 
   const [showPassword, setShowPassword] = React.useState(false);
-  const [authError, setAuthError] = React.useState<string | null>(null);
+  const [authError, setAuthError] = React.useState<string | null>(initialError);
   const [isNotRegistered, setIsNotRegistered] = React.useState(false);
   const [attemptedEmail, setAttemptedEmail] = React.useState(initialEmail);
   const [isLoading, setIsLoading] = React.useState(false);
@@ -145,6 +147,27 @@ function LoginForm() {
                 )}
               </div>
             )}
+
+            {/* Google Sign In Option */}
+            <div className="space-y-4">
+              <GoogleSignInButton
+                text="Continue with Google"
+                redirectTo={redirectTo}
+                onError={(err) => {
+                  setIsNotRegistered(false);
+                  setAuthError(err);
+                }}
+              />
+
+              <div className="relative flex items-center justify-center">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border/60" />
+                </div>
+                <div className="relative px-3 bg-card text-[11px] uppercase tracking-wider font-medium text-muted-foreground">
+                  or sign in with email
+                </div>
+              </div>
+            </div>
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div className="space-y-1.5">

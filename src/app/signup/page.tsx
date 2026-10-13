@@ -24,14 +24,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { BrandLogo } from '@/components/ui/brand-logo';
+import { GoogleSignInButton } from '@/components/auth/google-sign-in-button';
 
 function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialEmail = searchParams.get('email') || '';
+  const initialError = searchParams.get('error_description') || searchParams.get('error') || null;
 
   const [showPassword, setShowPassword] = React.useState(false);
-  const [authError, setAuthError] = React.useState<string | null>(null);
+  const [authError, setAuthError] = React.useState<string | null>(initialError);
   const [isAlreadyRegistered, setIsAlreadyRegistered] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const [signupSuccess, setSignupSuccess] = React.useState(false);
@@ -176,6 +178,27 @@ function SignupForm() {
                     )}
                   </div>
                 )}
+
+                {/* Google Sign Up Option */}
+                <div className="space-y-4">
+                  <GoogleSignInButton
+                    text="Sign up with Google"
+                    redirectTo="/chat"
+                    onError={(err) => {
+                      setIsAlreadyRegistered(false);
+                      setAuthError(err);
+                    }}
+                  />
+
+                  <div className="relative flex items-center justify-center">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-border/60" />
+                    </div>
+                    <div className="relative px-3 bg-card text-[11px] uppercase tracking-wider font-medium text-muted-foreground">
+                      or register with email
+                    </div>
+                  </div>
+                </div>
 
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-3.5">
                   <div className="space-y-1.5">
