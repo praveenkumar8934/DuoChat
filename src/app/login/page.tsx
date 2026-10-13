@@ -5,7 +5,19 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, UserPlus } from 'lucide-react';
+import {
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  ArrowRight,
+  AlertCircle,
+  UserPlus,
+  KeyRound,
+  Zap,
+  ClipboardPaste,
+  ShieldCheck,
+} from 'lucide-react';
 import { loginSchema, LoginFormData } from '@/lib/validations/auth';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { useAuth } from '@/context/auth-context';
@@ -21,13 +33,21 @@ function LoginForm() {
   const redirectTo = searchParams.get('redirectTo') || '/chat';
   const initialEmail = searchParams.get('email') || '';
   const initialError = searchParams.get('error_description') || searchParams.get('error') || null;
+  const initialMethod = searchParams.get('method') === 'secret-key' ? 'secret-key' : 'password';
+  const initialKey = searchParams.get('key') || '';
+
   const { isConfigured } = useAuth();
 
+  const [activeTab, setActiveTab] = React.useState<'password' | 'secret-key'>(initialMethod);
   const [showPassword, setShowPassword] = React.useState(false);
   const [authError, setAuthError] = React.useState<string | null>(initialError);
   const [isNotRegistered, setIsNotRegistered] = React.useState(false);
   const [attemptedEmail, setAttemptedEmail] = React.useState(initialEmail);
   const [isLoading, setIsLoading] = React.useState(false);
+
+  // Secret Key form state
+  const [secretKeyInput, setSecretKeyInput] = React.useState(initialKey);
+  const [isSecretKeyLoading, setIsSecretKeyLoading] = React.useState(false);
 
   const {
     register,
@@ -41,13 +61,30 @@ function LoginForm() {
     },
   });
 
+  const handleTabChange = (tab: 'password' | 'secret-key') => {
+    setActiveTab(tab);
+    setAuthError(null);
+    setIsNotRegistered(false);
+  };
+
+  const handlePasteKey = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        setSecretKeyInput(text.trim());
+      }
+    } catch {
+      // Browser permission denied or unavailable
+    }
+  };
+
+  // Standard Email & Password Login
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     setAuthError(null);
     setIsNotRegistered(false);
     const cleanEmail = data.email.trim();
     setAttemptedEmail(cleanEmail);
-
 
     try {
       const supabase = getSupabaseBrowserClient();
@@ -97,6 +134,56 @@ function LoginForm() {
     }
   };
 
+  // Instant Secret Key Login
+  const onSecretKeySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanKey = secretKeyInput.trim();
+
+    if (!cleanKey) {
+      setAuthError('Please enter or paste your Secret Key.');
+      return;
+    }
+
+    setIsSecretKeyLoading(true);
+    setAuthError(null);
+    setIsNotRegistered(false);
+
+    try {
+      const res = await fetch('/api/auth/secret-key-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secretKey: cleanKey }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setAuthError(data.error || 'Failed to sign in with Secret Key.');
+        setIsSecretKeyLoading(false);
+        return;
+      }
+
+      // Establish client-side Supabase session immediately
+      if (data.tokenHash) {
+        try {
+          const supabase = getSupabaseBrowserClient();
+          await supabase.auth.verifyOtp({
+            token_hash: data.tokenHash,
+            type: 'magiclink',
+          });
+        } catch (otpErr) {
+          console.warn('Client-side OTP verification fallback:', otpErr);
+        }
+      }
+
+      // Redirect user directly into application
+      window.location.href = redirectTo;
+    } catch (err: unknown) {
+      setAuthError((err as Error)?.message || 'Could not verify Secret Key. Please try again.');
+      setIsSecretKeyLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground selection:bg-rose-500/20">
       {/* Top Bar */}
@@ -121,6 +208,38 @@ function LoginForm() {
           </div>
 
           <div className="p-6 sm:p-7 rounded-3xl bg-card/90 border border-border/80 shadow-2xl space-y-5 backdrop-blur-md">
+            {/* Login Mode Segmented Switcher */}
+            <div className="p-1 rounded-2xl bg-muted/60 border border-border/50 grid grid-cols-2 gap-1">
+              <button
+                type="button"
+                onClick={() => handleTabChange('password')}
+                className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  activeTab === 'password'
+                    ? 'bg-card text-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Mail className="w-3.5 h-3.5" />
+                <span>Password</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleTabChange('secret-key')}
+                className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  activeTab === 'secret-key'
+                    ? 'bg-card text-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <KeyRound className="w-3.5 h-3.5 text-primary" />
+                <span>Secret Key</span>
+                <span className="px-1.5 py-0.2 rounded-md text-[10px] font-bold bg-primary/15 text-primary">
+                  Fast
+                </span>
+              </button>
+            </div>
+
             {authError && (
               <div
                 className={`p-4 rounded-2xl text-xs border space-y-2.5 ${
@@ -148,83 +267,154 @@ function LoginForm() {
               </div>
             )}
 
-            {/* Google Sign In Option */}
-            <div className="space-y-4">
-              <GoogleSignInButton
-                text="Continue with Google"
-                redirectTo={redirectTo}
-                onError={(err) => {
-                  setIsNotRegistered(false);
-                  setAuthError(err);
-                }}
-              />
+            {/* TAB 1: PASSWORD & GOOGLE LOGIN */}
+            {activeTab === 'password' && (
+              <>
+                {/* Google Sign In Option */}
+                <div className="space-y-4">
+                  <GoogleSignInButton
+                    text="Continue with Google"
+                    redirectTo={redirectTo}
+                    onError={(err) => {
+                      setIsNotRegistered(false);
+                      setAuthError(err);
+                    }}
+                  />
 
-              <div className="relative flex items-center justify-center">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-border/60" />
+                  <div className="relative flex items-center justify-center">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-border/60" />
+                    </div>
+                    <div className="relative px-3 bg-card text-[11px] uppercase tracking-wider font-medium text-muted-foreground">
+                      or sign in with email
+                    </div>
+                  </div>
                 </div>
-                <div className="relative px-3 bg-card text-[11px] uppercase tracking-wider font-medium text-muted-foreground">
-                  or sign in with email
-                </div>
-              </div>
-            </div>
 
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground">
-                  Email Address
-                </label>
-                <Input
-                  type="email"
-                  placeholder="name@example.com"
-                  leftIcon={<Mail className="w-4 h-4 text-muted-foreground" />}
-                  error={errors.email?.message}
-                  className="rounded-xl"
-                  {...register('email')}
-                />
-              </div>
+                <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground">
+                      Email Address
+                    </label>
+                    <Input
+                      type="email"
+                      placeholder="name@example.com"
+                      leftIcon={<Mail className="w-4 h-4 text-muted-foreground" />}
+                      error={errors.email?.message}
+                      className="rounded-xl"
+                      {...register('email')}
+                    />
+                  </div>
 
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-foreground">
-                    Password
-                  </label>
-                  <Link
-                    href="/forgot-password"
-                    className="text-xs text-primary hover:underline font-medium"
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-foreground">
+                        Password
+                      </label>
+                      <Link
+                        href="/forgot-password"
+                        className="text-xs text-primary hover:underline font-medium"
+                      >
+                        Forgot password?
+                      </Link>
+                    </div>
+                    <Input
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="Enter your password"
+                      leftIcon={<Lock className="w-4 h-4 text-muted-foreground" />}
+                      rightIcon={
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="text-muted-foreground hover:text-foreground cursor-pointer"
+                          aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      }
+                      error={errors.password?.message}
+                      className="rounded-xl"
+                      {...register('password')}
+                    />
+                  </div>
+
+                  <Button
+                    type="submit"
+                    isLoading={isLoading}
+                    className="w-full rounded-2xl font-semibold shadow-md mt-3 bg-gradient-to-tr from-[#702C45] to-[#C96B83] text-white hover:opacity-95 cursor-pointer"
                   >
-                    Forgot password?
-                  </Link>
+                    Sign In to Our Space
+                    <ArrowRight className="w-4 h-4 ml-1.5" />
+                  </Button>
+                </form>
+              </>
+            )}
+
+            {/* TAB 2: INSTANT SECRET KEY LOGIN */}
+            {activeTab === 'secret-key' && (
+              <form onSubmit={onSecretKeySubmit} className="space-y-4">
+                <div className="p-3.5 rounded-2xl bg-primary/5 border border-primary/20 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>Instant Passwordless Access</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Paste your personal DuoChat Secret Key below to jump straight into your chat without passwords or email confirmation.
+                  </p>
                 </div>
-                <Input
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="Enter your password"
-                  leftIcon={<Lock className="w-4 h-4 text-muted-foreground" />}
-                  rightIcon={
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-foreground">
+                      Your Secret Key
+                    </label>
                     <button
                       type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="text-muted-foreground hover:text-foreground cursor-pointer"
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      onClick={handlePasteKey}
+                      className="text-xs text-primary hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
                     >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      <ClipboardPaste className="w-3 h-3" />
+                      Paste from clipboard
                     </button>
-                  }
-                  error={errors.password?.message}
-                  className="rounded-xl"
-                  {...register('password')}
-                />
-              </div>
+                  </div>
 
-              <Button
-                type="submit"
-                isLoading={isLoading}
-                className="w-full rounded-2xl font-semibold shadow-md mt-3 bg-gradient-to-tr from-[#702C45] to-[#C96B83] text-white hover:opacity-95 cursor-pointer"
-              >
-                Sign In to Our Space
-                <ArrowRight className="w-4 h-4 ml-1.5" />
-              </Button>
-            </form>
+                  <Input
+                    type="text"
+                    placeholder="DUO-SEC-XXXX-XXXX-XXXX-XXXX"
+                    value={secretKeyInput}
+                    onChange={(e) => setSecretKeyInput(e.target.value.toUpperCase())}
+                    leftIcon={<KeyRound className="w-4 h-4 text-muted-foreground" />}
+                    className="rounded-xl font-mono tracking-wider uppercase text-sm"
+                    autoFocus
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Accepts format: DUO-SEC-XXXX-XXXX-XXXX-XXXX or raw 16 characters.
+                  </p>
+                </div>
+
+                <Button
+                  type="submit"
+                  isLoading={isSecretKeyLoading}
+                  className="w-full rounded-2xl font-semibold shadow-md mt-3 bg-gradient-to-tr from-[#702C45] to-[#C96B83] text-white hover:opacity-95 cursor-pointer"
+                >
+                  <ShieldCheck className="w-4 h-4 mr-1.5" />
+                  Sign In with Secret Key
+                  <ArrowRight className="w-4 h-4 ml-1.5" />
+                </Button>
+
+                <div className="pt-2 text-center text-xs text-muted-foreground leading-relaxed">
+                  Lost or don&apos;t have a Secret Key yet?{' '}
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange('password')}
+                    className="font-semibold text-primary hover:underline cursor-pointer"
+                  >
+                    Use Password instead
+                  </button>
+                  , or generate one anytime in your Profile Settings.
+                </div>
+              </form>
+            )}
 
             <div className="text-center pt-2 border-t border-border/50 text-xs text-muted-foreground">
               Don&apos;t have an account yet?{' '}
