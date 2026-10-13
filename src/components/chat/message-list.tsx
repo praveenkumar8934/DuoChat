@@ -16,6 +16,8 @@ export function MessageList() {
     activeConversation,
   } = useChat();
 
+  const [selectedMessageId, setSelectedMessageId] = React.useState<string | null>(null);
+
   const bottomRef = React.useRef<HTMLDivElement | null>(null);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -110,6 +112,15 @@ export function MessageList() {
   return (
     <div
       ref={containerRef}
+      onClick={(e) => {
+        // If clicked on wallpaper or background area, deselect active message
+        if (
+          e.target === containerRef.current ||
+          (e.target as HTMLElement).classList.contains('romantic-wallpaper')
+        ) {
+          setSelectedMessageId(null);
+        }
+      }}
       className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-4 romantic-wallpaper"
     >
       {groupedMessages.map(group => (
@@ -132,6 +143,11 @@ export function MessageList() {
               key={message.id}
               message={message}
               isFirstInGroup={idx === 0 || group.items[idx - 1]?.sender_id !== message.sender_id}
+              isSelected={selectedMessageId === message.id}
+              onToggleSelect={() =>
+                setSelectedMessageId(prev => (prev === message.id ? null : message.id))
+              }
+              onDeselect={() => setSelectedMessageId(null)}
             />
           ))}
         </div>

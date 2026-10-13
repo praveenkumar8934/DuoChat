@@ -16,6 +16,7 @@ import {
   Bookmark,
   Heart,
   Sparkles,
+  MoreHorizontal,
 } from 'lucide-react';
 import { MessageWithDetails } from '@/types/database';
 import { useAuth } from '@/context/auth-context';
@@ -29,21 +30,32 @@ import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { spawnFloatingHearts } from '@/components/ui/floating-hearts';
 import { useRomanticFeatures } from '@/lib/romantic-features';
+import { toast } from '@/components/ui/toast';
 
 interface MessageBubbleProps {
   message: MessageWithDetails;
   isFirstInGroup?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: () => void;
+  onDeselect?: () => void;
 }
 
 const COMMON_EMOJIS = ['❤️', '💕', '🥰', '✨', '😂', '🔥', '☕'];
 
-export function MessageBubble({ message, isFirstInGroup = true }: MessageBubbleProps) {
+export function MessageBubble({
+  message,
+  isFirstInGroup = true,
+  isSelected = false,
+  onToggleSelect,
+  onDeselect,
+}: MessageBubbleProps) {
   const { profile } = useAuth();
   const {
     setReplyingTo,
     toggleReaction,
     editMessage,
     deleteMessage,
+    activeConversation,
   } = useChat();
 
   const { isFavorite, toggleFav } = useRomanticFeatures();
@@ -54,6 +66,8 @@ export function MessageBubble({ message, isFirstInGroup = true }: MessageBubbleP
   const [showReactionPicker, setShowReactionPicker] = React.useState(false);
   const [showDeleteModal, setShowDeleteModal] = React.useState(false);
   const [isCopied, setIsCopied] = React.useState(false);
+
+  const touchTimerRef = React.useRef<NodeJS.Timeout | null>(null);
 
   const isOutgoing = message.sender_id === profile?.id;
 
@@ -86,6 +100,7 @@ export function MessageBubble({ message, isFirstInGroup = true }: MessageBubbleP
     if (displayBody) {
       navigator.clipboard.writeText(displayBody);
       setIsCopied(true);
+      toast.success('Message copied to clipboard');
       setTimeout(() => setIsCopied(false), 2000);
     }
   };
@@ -94,6 +109,7 @@ export function MessageBubble({ message, isFirstInGroup = true }: MessageBubbleP
     if (editText.trim() && editText !== displayBody) {
       const updated = isLittleNote ? `[💌 Note] ${editText.trim()}` : editText.trim();
       await editMessage(message.id, updated);
+      toast.success('Message updated');
     }
     setIsEditing(false);
   };
@@ -101,6 +117,7 @@ export function MessageBubble({ message, isFirstInGroup = true }: MessageBubbleP
   const handleDelete = async () => {
     await deleteMessage(message.id);
     setShowDeleteModal(false);
+    toast.success('Message deleted');
   };
 
   const handleReactionClick = (emoji: string, e?: React.MouseEvent) => {
@@ -112,11 +129,31 @@ export function MessageBubble({ message, isFirstInGroup = true }: MessageBubbleP
     setShowReactionPicker(false);
   };
 
-  const handleToggleFavorite = (e: React.MouseEvent) => {
+  const handleToggleFavorite = (e?: React.MouseEvent) => {
     const isNowFav = toggleFav(message.id);
     if (isNowFav) {
       const rect = (e?.currentTarget as HTMLElement)?.getBoundingClientRect();
       spawnFloatingHearts(rect?.left ?? window.innerWidth / 2, rect?.top ?? window.innerHeight / 2, 5);
+      toast.success('Saved to Our Moments');
+    } else {
+      toast.info('Removed from Our Moments');
+    }
+  };
+
+  // Touch handlers for mobile long-press selection
+  const handleTouchStart = () => {
+    touchTimerRef.current = setTimeout(() => {
+      onToggleSelect?.();
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(40);
+      }
+    }, 450);
+  };
+
+  const handleTouchEnd = () => {
+    if (touchTimerRef.current) {
+      clearTimeout(touchTimerRef.current);
+      touchTimerRef.current = null;
     }
   };
 
@@ -138,12 +175,13 @@ export function MessageBubble({ message, isFirstInGroup = true }: MessageBubbleP
         isOutgoing ? 'items-end' : 'items-start'
       )}
     >
-      {/* Quick Action Floating Toolbar on Hover */}
+      {/* Quick Action Floating Toolbar (visible on hover OR when selected) */}
       {!isEditing && (
         <div
           className={cn(
-            'absolute -top-4 z-20 hidden group-hover:flex items-center gap-0.5 rounded-2xl bg-card/95 border border-border/80 p-1 shadow-md text-muted-foreground backdrop-blur-md transition-all',
-            isOutgoing ? 'right-2' : 'left-2'
+            'absolute -top-4 z-20 items-center gap-0.5 rounded-2xl bg-card/95 border border-border/80 p-1 shadow-md text-muted-foreground backdrop-blur-md transition-all',
+            isOutgoing ? 'right-2' : 'left-2',
+            isSelected ? 'flex scale-100 opacity-100' : 'hidden group-hover:flex'
           )}
         >
           {/* Reaction Trigger */}
@@ -226,6 +264,7 @@ export function MessageBubble({ message, isFirstInGroup = true }: MessageBubbleP
               onClick={() => {
                 setIsEditing(true);
                 setEditText(displayBody || '');
+                onDeselect?.();
               }}
               aria-label="Edit message"
               className="p-1.5 rounded-xl hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
@@ -237,7 +276,10 @@ export function MessageBubble({ message, isFirstInGroup = true }: MessageBubbleP
           {/* Delete */}
           {isOutgoing && (
             <button
-              onClick={() => setShowDeleteModal(true)}
+              onClick={() => {
+                setShowDeleteModal(true);
+                onDeselect?.();
+              }}
               aria-label="Delete message"
               className="p-1.5 rounded-xl hover:bg-destructive/10 hover:text-destructive transition-colors cursor-pointer"
             >
@@ -255,7 +297,7 @@ export function MessageBubble({ message, isFirstInGroup = true }: MessageBubbleP
             isOutgoing ? 'mr-1' : 'ml-1'
           )}
         >
-          <Reply className="w-3 h-3 shrink-0 text-primary" />
+          <Reply className="w-3.5 h-3.5 shrink-0 text-primary" />
           <span className="font-semibold text-foreground shrink-0">
             {message.reply_to.sender_name}:
           </span>
@@ -267,13 +309,23 @@ export function MessageBubble({ message, isFirstInGroup = true }: MessageBubbleP
 
       {/* Main Bubble Content */}
       <div
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest('button, a, input, textarea, audio, video')) {
+            return;
+          }
+          onToggleSelect?.();
+        }}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onTouchMove={handleTouchEnd}
         className={cn(
-          'relative max-w-[85%] sm:max-w-md rounded-2xl p-3 sm:p-3.5 shadow-xs transition-all',
+          'relative max-w-[85%] sm:max-w-md rounded-2xl p-3 sm:p-3.5 shadow-xs transition-all cursor-pointer select-text',
           isLittleNote
             ? 'little-note-card rounded-2xl'
             : isOutgoing
             ? 'bg-gradient-to-tr from-[#702C45] via-[#8B3755] to-[#A84B69] text-white rounded-br-xs shadow-rose-900/10'
-            : 'bg-card/95 dark:bg-[#211B24] text-card-foreground border border-[#EDE1E5]/80 dark:border-[#382B36] rounded-bl-xs'
+            : 'bg-card/95 dark:bg-[#211B24] text-card-foreground border border-[#EDE1E5]/80 dark:border-[#382B36] rounded-bl-xs',
+          isSelected && 'ring-2 ring-primary ring-offset-2 ring-offset-background scale-[1.01]'
         )}
       >
         {/* Little Note Header Badge */}
@@ -334,19 +386,20 @@ export function MessageBubble({ message, isFirstInGroup = true }: MessageBubbleP
 
         {/* Text Body / Inline Edit */}
         {isEditing ? (
-          <div className="space-y-2 mt-1">
+          <div className="space-y-2 mt-1" onClick={e => e.stopPropagation()}>
             <textarea
               value={editText}
               onChange={e => setEditText(e.target.value)}
               className="w-full p-2 text-xs rounded-xl bg-background text-foreground border border-border focus:outline-none focus:ring-1 focus:ring-ring"
               rows={2}
+              autoFocus
             />
             <div className="flex items-center justify-end gap-1.5">
               <Button
                 size="sm"
                 variant="ghost"
                 onClick={() => setIsEditing(false)}
-                className="h-7 text-xs px-2"
+                className="h-7 text-xs px-2 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5 mr-1" />
                 Cancel
@@ -355,7 +408,7 @@ export function MessageBubble({ message, isFirstInGroup = true }: MessageBubbleP
                 size="sm"
                 variant="secondary"
                 onClick={handleSaveEdit}
-                className="h-7 text-xs px-2.5 font-medium"
+                className="h-7 text-xs px-2.5 font-medium cursor-pointer"
               >
                 <CheckIcon className="w-3.5 h-3.5 mr-1" />
                 Save
@@ -396,6 +449,20 @@ export function MessageBubble({ message, isFirstInGroup = true }: MessageBubbleP
           {message.edited_at && <span className="italic opacity-80">(edited)</span>}
           <span>{formatMessageTime(message.created_at)}</span>
           {renderStatus()}
+
+          {/* Mobile 3-Dots Quick Trigger */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSelect?.();
+            }}
+            className="sm:hidden p-0.5 rounded-md text-inherit opacity-70 hover:opacity-100 transition-opacity cursor-pointer inline-flex items-center justify-center"
+            title="Message options"
+            aria-label="Message options"
+          >
+            <MoreHorizontal className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
 
@@ -409,7 +476,6 @@ export function MessageBubble({ message, isFirstInGroup = true }: MessageBubbleP
         >
           {Object.entries(groupedReactions).map(([emoji, userIds]) => {
             const hasReacted = profile ? userIds.includes(profile.id) : false;
-            const isHeartEmoji = emoji === '❤️' || emoji === '💕' || emoji === '🥰';
 
             return (
               <button
@@ -427,6 +493,184 @@ export function MessageBubble({ message, isFirstInGroup = true }: MessageBubbleP
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* MOBILE SELECTION BOTTOM ACTION SHEET */}
+      {isSelected && (
+        <div
+          className="fixed inset-0 z-50 sm:hidden flex flex-col justify-end animate-in fade-in duration-200"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDeselect?.();
+          }}
+        >
+          {/* Backdrop */}
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-xs" />
+
+          {/* Drawer Sheet */}
+          <div
+            className="relative w-full max-h-[85vh] bg-card text-card-foreground border-t border-border/80 rounded-t-3xl p-4 shadow-2xl z-10 space-y-4 animate-in slide-in-from-bottom duration-200 overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Grab Handle */}
+            <div className="w-10 h-1 bg-muted-foreground/30 rounded-full mx-auto" />
+
+            {/* Header / Message Snippet */}
+            <div className="flex items-center justify-between pb-2 border-b border-border/60">
+              <div className="min-w-0 flex-1 pr-2">
+                <span className="text-[11px] font-semibold text-primary uppercase tracking-wider block">
+                  {isOutgoing
+                    ? 'Your Sent Message'
+                    : activeConversation?.otherUser?.display_name || 'Partner Message'}
+                </span>
+                <p className="text-xs text-muted-foreground truncate mt-0.5 font-sans">
+                  {displayBody || message.original_filename || `[${message.message_type}]`}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onDeselect}
+                className="p-1.5 rounded-full hover:bg-muted text-muted-foreground transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Quick Reaction Emojis Row */}
+            <div className="flex items-center justify-between gap-1 p-2 rounded-2xl bg-muted/50 border border-border/60 overflow-x-auto">
+              {COMMON_EMOJIS.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={(e) => {
+                    handleReactionClick(emoji, e);
+                    onDeselect?.();
+                  }}
+                  className="p-2 hover:scale-125 transition-transform text-xl cursor-pointer"
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+
+            {/* Action Buttons List */}
+            <div className="space-y-1">
+              {/* Copy */}
+              {displayBody && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleCopy();
+                    onDeselect?.();
+                  }}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-muted text-xs font-medium text-foreground transition-colors cursor-pointer text-left"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                    <Copy className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="block font-semibold">Copy Text</span>
+                    <span className="text-[10px] text-muted-foreground">Copy message to your clipboard</span>
+                  </div>
+                </button>
+              )}
+
+              {/* Edit (only outgoing text) */}
+              {isOutgoing && message.message_type === 'text' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditing(true);
+                    setEditText(displayBody || '');
+                    onDeselect?.();
+                  }}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-muted text-xs font-medium text-foreground transition-colors cursor-pointer text-left"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                    <Edit2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="block font-semibold">Edit Message</span>
+                    <span className="text-[10px] text-muted-foreground">Modify your sent message</span>
+                  </div>
+                </button>
+              )}
+
+              {/* Reply */}
+              <button
+                type="button"
+                onClick={() => {
+                  setReplyingTo(message);
+                  onDeselect?.();
+                }}
+                className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-muted text-xs font-medium text-foreground transition-colors cursor-pointer text-left"
+              >
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                  <Reply className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="block font-semibold">Reply</span>
+                  <span className="text-[10px] text-muted-foreground">Quote this message in your reply</span>
+                </div>
+              </button>
+
+              {/* Bookmark to Moments */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  handleToggleFavorite(e);
+                  onDeselect?.();
+                }}
+                className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-muted text-xs font-medium text-foreground transition-colors cursor-pointer text-left"
+              >
+                <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-500 shrink-0">
+                  <Bookmark className={cn('w-4 h-4', isBookmarked && 'fill-current')} />
+                </div>
+                <div>
+                  <span className="block font-semibold">
+                    {isBookmarked ? 'Remove from Our Moments' : 'Save to Our Moments'}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    Keep this special moment in your shared memory box
+                  </span>
+                </div>
+              </button>
+
+              {/* Delete (only outgoing) */}
+              {isOutgoing && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDeleteModal(true);
+                    onDeselect?.();
+                  }}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-destructive/10 text-xs font-medium text-destructive transition-colors cursor-pointer text-left"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-destructive/15 flex items-center justify-center text-destructive shrink-0">
+                    <Trash2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="block font-semibold">Delete Message</span>
+                    <span className="text-[10px] text-destructive/80">Delete for both you and your partner</span>
+                  </div>
+                </button>
+              )}
+            </div>
+
+            {/* Cancel Button */}
+            <div className="pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onDeselect}
+                className="w-full rounded-xl text-xs font-medium cursor-pointer"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 
