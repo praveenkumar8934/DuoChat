@@ -421,7 +421,12 @@ export function Sidebar() {
               return (
                 <div
                   key={conv.id}
-                  onClick={() => setActiveConversationId(conv.id)}
+                  onClick={() => {
+                    setActiveConversationId(conv.id);
+                    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+                      window.history.pushState({ chat: conv.id }, '', '/chat');
+                    }
+                  }}
                   className={cn(
                     'flex items-center gap-3 px-3.5 sm:px-4 py-3 cursor-pointer transition-colors relative group',
                     isActive
@@ -476,9 +481,17 @@ export function Sidebar() {
                           </span>
                         ) : conv.lastMessage ? (
                           <>
-                            {isLastMsgFromMe && (
-                              <CheckCheck className="w-3.5 h-3.5 text-muted-foreground shrink-0 inline mr-1" />
-                            )}
+                            {isLastMsgFromMe && (() => {
+                              const otherLastRead = other?.id ? conv.members?.find(m => m.user_id === other.id)?.last_read_at : null;
+                              const isRead = otherLastRead && conv.lastMessage?.created_at && new Date(otherLastRead) >= new Date(conv.lastMessage.created_at);
+                              if (isRead) {
+                                return <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb] stroke-[2.5] shrink-0 inline mr-1" />;
+                              }
+                              if (isOtherOnline) {
+                                return <CheckCheck className="w-3.5 h-3.5 text-muted-foreground shrink-0 inline mr-1" />;
+                              }
+                              return <Check className="w-3.5 h-3.5 text-muted-foreground shrink-0 inline mr-1" />;
+                            })()}
                             {getMediaPreviewIcon(conv.lastMessage?.message_type)}
                             <span className="truncate">
                               {conv.lastMessage?.body?.startsWith('[💌 Note]')

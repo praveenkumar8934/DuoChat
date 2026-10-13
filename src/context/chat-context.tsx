@@ -10,7 +10,9 @@ import {
   MessageType,
   UserPresence,
   MessageReaction,
+  DeliveryStatus,
 } from '@/types/database';
+import { computeMessageDeliveryStatus } from '@/lib/utils';
 
 export interface ChatContextType {
   conversations: ConversationWithDetails[];
@@ -111,6 +113,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const channelRef = useRef<any>(null);
+  const initialAutoSelectDoneRef = useRef(false);
 
   // Active conversation object
   const activeConversation = conversations.find(c => c.id === activeConversationId) || null;
@@ -142,6 +145,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   // Load conversations
   const refreshConversations = useCallback(async () => {
     if (!profile) {
+      initialAutoSelectDoneRef.current = false;
       setConversations([]);
       setActiveConversationId(null);
       return;
@@ -229,13 +233,20 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       }
 
       setConversations(convList);
-      if (!activeConversationId && convList.length > 0) {
-        setActiveConversationId(convList[0].id);
+
+      // Only auto-select first conversation once on desktop initial mount (>= 768px).
+      // On mobile (< 768px), keep activeConversationId as null so user lands on WhatsApp-style friend list.
+      if (!initialAutoSelectDoneRef.current) {
+        initialAutoSelectDoneRef.current = true;
+        const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768;
+        if (isDesktop && convList.length > 0) {
+          setActiveConversationId(convList[0].id);
+        }
       }
     } catch (err) {
       console.error('Failed to load conversations:', err);
     }
-  }, [profile, isConfigured, activeConversationId]);
+  }, [profile, isConfigured]);
 
   // Connect with a partner via Duo ID or username (sends connection request)
   const connectWithPartner = useCallback(
@@ -367,9 +378,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           prev.filter(c => c.id !== conversationId && c.otherUser?.id !== friendId)
         );
 
-        if (activeConversationId === conversationId) {
-          setActiveConversationId(null);
-        }
+        setActiveConversationId(curr => (curr === conversationId ? null : curr));
 
         await refreshConversations();
         await refreshRequests();
@@ -379,7 +388,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         return { success: false, error: err?.message || 'Network error' };
       }
     },
-    [profile?.id, activeConversationId, refreshConversations, refreshRequests]
+    [profile?.id, refreshConversations, refreshRequests]
   );
 
   // Real-time synchronization for connection requests and friends
@@ -407,8 +416,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       .on('broadcast', { event: 'friend-removed' }, (payload: any) => {
         refreshConversations();
         refreshRequests();
-        if (payload?.payload?.conversationId && payload.payload.conversationId === activeConversationId) {
-          setActiveConversationId(null);
+        if (payload?.payload?.conversationId) {
+          setActiveConversationId(curr => (curr === payload.payload.conversationId ? null : curr));
         }
       })
       .subscribe();
@@ -475,14 +484,15 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
               signedMediaUrl = signedData?.signedUrl ?? null;
             }
 
-            // Calculate delivery status
-            let status: MessageWithDetails['deliveryStatus'] = 'sent';
-            const receipts = msg.receipts || [];
-            if (receipts.some((r: any) => r.read_at)) {
-              status = 'read';
-            } else if (receipts.some((r: any) => r.delivered_at)) {
-              status = 'delivered';
-            }
+            // Calculate delivery status accurately
+            const otherUser = activeConversation?.otherUser;
+            const otherMember = activeConversation?.members?.find(m => m.user_id !== profile?.id);
+            const status = computeMessageDeliveryStatus({
+              receipts: msg.receipts,
+              partnerLastReadAt: otherMember?.last_read_at,
+              messageCreatedAt: msg.created_at,
+              isPartnerOnline: otherUser?.id ? isUserOnline(otherUser.id) : false,
+            });
 
             return {
               ...msg,
@@ -700,14 +710,89 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     };
   }, [isConfigured, profile?.id]);
 
-  // Handle active conversation change
+  // Mark conversation and its unread messages as read
+  const markConversationAsRead = useCallback(
+    async (conversationId: string) => {
+      if (!profile || !conversationId) return;
+
+      setConversations(prev =>
+        prev.map(c => (c.id === conversationId ? { ...c, unreadCount: 0 } : c))
+      );
+
+      if (isConfigured) {
+        const supabase = getSupabaseBrowserClient();
+        const now = new Date().toISOString();
+
+        try {
+          await supabase
+            .from('conversation_members')
+            .update({ last_read_at: now })
+            .eq('conversation_id', conversationId)
+            .eq('user_id', profile.id);
+
+          await supabase
+            .from('message_receipts')
+            .update({ read_at: now })
+            .eq('user_id', profile.id)
+            .is('read_at', null);
+
+          // Broadcast to partner in real-time that all messages are seen
+          if (channelRef.current) {
+            channelRef.current.send({
+              type: 'broadcast',
+              event: 'messages-read',
+              payload: {
+                conversationId,
+                readerId: profile.id,
+                timestamp: now,
+              },
+            });
+          }
+        } catch (err) {
+          console.warn('Failed to mark conversation read:', err);
+        }
+      }
+    },
+    [profile, isConfigured]
+  );
+
+  // Handle active conversation change: load messages & mark as read
   useEffect(() => {
     if (activeConversationId) {
       loadMessages(activeConversationId);
+      markConversationAsRead(activeConversationId);
     } else {
       setMessages([]);
     }
-  }, [activeConversationId, loadMessages]);
+  }, [activeConversationId, loadMessages, markConversationAsRead]);
+
+  // When tab is re-focused or becomes visible, mark current conversation messages as read
+  useEffect(() => {
+    const handleFocus = () => {
+      if (activeConversationId && document.visibilityState === 'visible') {
+        markConversationAsRead(activeConversationId);
+      }
+    };
+    document.addEventListener('visibilitychange', handleFocus);
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', handleFocus);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [activeConversationId, markConversationAsRead]);
+
+  // When partner presence turns online, update sent messages to delivered
+  useEffect(() => {
+    if (friendPresence.online && activeConversationId && profile?.id) {
+      setMessages(prev =>
+        prev.map(m =>
+          m.sender_id === profile.id && m.deliveryStatus === 'sent'
+            ? { ...m, deliveryStatus: 'delivered' }
+            : m
+        )
+      );
+    }
+  }, [friendPresence.online, activeConversationId, profile?.id]);
 
   // Realtime subscription setup
   useEffect(() => {
@@ -793,12 +878,19 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             signedUrl = signedData?.signedUrl ?? null;
           }
 
+          const otherUser = activeConversation?.otherUser;
+          const isPartnerOnline = otherUser?.id ? isUserOnline(otherUser.id) : false;
+          const statusForInsertedMsg: DeliveryStatus =
+            newMsg.sender_id === profile.id
+              ? (isPartnerOnline ? 'delivered' : 'sent')
+              : 'delivered';
+
           const completeMessage: MessageWithDetails = {
             ...newMsg,
             sender: senderProfile,
             reactions: [],
             receipts: [],
-            deliveryStatus: 'delivered',
+            deliveryStatus: statusForInsertedMsg,
             signedMediaUrl: signedUrl,
           };
 
@@ -811,16 +903,91 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             return [...prev, completeMessage];
           });
 
-          // If incoming message from other user, record receipt
+          // If incoming message from other user, record receipt and broadcast status
           if (newMsg.sender_id !== profile.id) {
-            await supabase.from('message_receipts').upsert(
-              {
-                message_id: newMsg.id,
-                user_id: profile.id,
-                delivered_at: new Date().toISOString(),
-                read_at: new Date().toISOString(),
-              },
-              { onConflict: 'message_id,user_id' }
+            const isViewingThisChat = activeConversationId === newMsg.conversation_id && !document.hidden;
+            const now = new Date().toISOString();
+
+            try {
+              await supabase.from('message_receipts').upsert(
+                {
+                  message_id: newMsg.id,
+                  user_id: profile.id,
+                  delivered_at: now,
+                  read_at: isViewingThisChat ? now : null,
+                },
+                { onConflict: 'message_id,user_id' }
+              );
+
+              if (isViewingThisChat) {
+                await supabase
+                  .from('conversation_members')
+                  .update({ last_read_at: now })
+                  .eq('conversation_id', newMsg.conversation_id)
+                  .eq('user_id', profile.id);
+              }
+
+              if (channelRef.current) {
+                channelRef.current.send({
+                  type: 'broadcast',
+                  event: isViewingThisChat ? 'messages-read' : 'message-delivered',
+                  payload: {
+                    conversationId: newMsg.conversation_id,
+                    messageId: newMsg.id,
+                    readerId: profile.id,
+                    timestamp: now,
+                  },
+                });
+              }
+            } catch (err) {
+              console.warn('Error recording receipt:', err);
+            }
+          }
+        }
+      )
+      .on('broadcast', { event: 'messages-read' }, (payload: any) => {
+        const data = payload?.payload;
+        if (data?.conversationId === activeConversationId && data?.readerId !== profile.id) {
+          // Partner saw all messages in this conversation! All outgoing ticks turn blue
+          setMessages(prev =>
+            prev.map(m =>
+              m.sender_id === profile.id
+                ? { ...m, deliveryStatus: 'read' }
+                : m
+            )
+          );
+        }
+      })
+      .on('broadcast', { event: 'message-delivered' }, (payload: any) => {
+        const data = payload?.payload;
+        if (data?.conversationId === activeConversationId) {
+          setMessages(prev =>
+            prev.map(m =>
+              (data?.messageId ? m.id === data.messageId : m.sender_id === profile.id) && m.deliveryStatus !== 'read'
+                ? { ...m, deliveryStatus: 'delivered' }
+                : m
+            )
+          );
+        }
+      })
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'message_receipts',
+        },
+        (payload: any) => {
+          const receipt = payload.new as any;
+          if (receipt?.message_id) {
+            setMessages(prev =>
+              prev.map(m => {
+                if (m.id === receipt.message_id && m.sender_id === profile.id) {
+                  const newStatus = receipt.read_at ? 'read' : receipt.delivered_at ? 'delivered' : m.deliveryStatus;
+                  return { ...m, deliveryStatus: newStatus };
+                }
+                return m;
+              })
             );
           }
         }
@@ -1010,11 +1177,16 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         throw new Error(insertErr?.message || 'Failed to send message');
       }
 
-      // Update optimistic message with real ID and sent status
+      // Determine initial delivery status: delivered if partner is online, sent if offline
+      const otherUser = activeConversation?.otherUser;
+      const isPartnerOnline = otherUser?.id ? isUserOnline(otherUser.id) : false;
+      const initialStatus: DeliveryStatus = isPartnerOnline ? 'delivered' : 'sent';
+
+      // Update optimistic message with real ID and initial status
       setMessages(prev =>
         prev.map(m =>
           m.id === optimisticId
-            ? { ...m, ...insertedMsg, isOptimistic: false, deliveryStatus: 'sent' }
+            ? { ...m, ...insertedMsg, isOptimistic: false, deliveryStatus: initialStatus }
             : m
         )
       );
@@ -1152,23 +1324,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Mark conversation as read
-  const markConversationAsRead = async (conversationId: string) => {
-    if (!profile) return;
 
-    setConversations(prev =>
-      prev.map(c => (c.id === conversationId ? { ...c, unreadCount: 0 } : c))
-    );
-
-    if (isConfigured) {
-      const supabase = getSupabaseBrowserClient();
-      await supabase
-        .from('conversation_members')
-        .update({ last_read_at: new Date().toISOString() })
-        .eq('conversation_id', conversationId)
-        .eq('user_id', profile.id);
-    }
-  };
 
   return (
     <ChatContext.Provider

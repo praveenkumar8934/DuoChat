@@ -82,15 +82,35 @@ export function MessageBubble({
     if (!isOutgoing) return null;
     switch (message.deliveryStatus) {
       case 'sending':
-        return <Clock className="w-3 h-3 text-white/70 animate-spin" />;
+        return (
+          <span title="Sending...">
+            <Clock className="w-3 h-3 text-white/70 animate-spin" />
+          </span>
+        );
       case 'sent':
-        return <Check className="w-3.5 h-3.5 text-white/70" />;
+        return (
+          <span title="Sent (Partner is offline)">
+            <Check className="w-3.5 h-3.5 text-white/70" />
+          </span>
+        );
       case 'delivered':
-        return <CheckCheck className="w-3.5 h-3.5 text-white/70" />;
+        return (
+          <span title="Delivered to partner">
+            <CheckCheck className="w-3.5 h-3.5 text-white/70" />
+          </span>
+        );
       case 'read':
-        return <CheckCheck className="w-3.5 h-3.5 text-rose-200 font-bold" />;
+        return (
+          <span title="Seen by partner">
+            <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb] drop-shadow-[0_0_2px_rgba(83,189,235,0.8)] font-bold stroke-[2.5]" />
+          </span>
+        );
       case 'failed':
-        return <AlertCircle className="w-3.5 h-3.5 text-rose-200" />;
+        return (
+          <span title="Failed to send">
+            <AlertCircle className="w-3.5 h-3.5 text-rose-300" />
+          </span>
+        );
       default:
         return <Check className="w-3.5 h-3.5 text-white/70" />;
     }

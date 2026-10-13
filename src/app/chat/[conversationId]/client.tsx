@@ -12,10 +12,10 @@ export default function DirectConversationClient({
   const { setActiveConversationId, activeConversationId } = useChat();
 
   React.useEffect(() => {
-    if (conversationId && conversationId !== activeConversationId) {
+    if (conversationId) {
       setActiveConversationId(conversationId);
     }
-  }, [conversationId, activeConversationId, setActiveConversationId]);
+  }, [conversationId, setActiveConversationId]);
 
   return <ChatPage />;
 }

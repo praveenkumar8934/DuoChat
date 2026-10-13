@@ -20,12 +20,21 @@ import { toast } from '@/components/ui/toast';
 
 export default function ChatPage() {
   const router = useRouter();
-  const { activeConversationId, conversations, connectWithPartner } = useChat();
+  const { activeConversationId, setActiveConversationId, conversations, connectWithPartner } = useChat();
   const { user, profile, isLoading } = useAuth();
   const [isInviteOpen, setIsInviteOpen] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   const [partnerInput, setPartnerInput] = React.useState('');
   const [isConnecting, setIsConnecting] = React.useState(false);
+
+  // Handle mobile back gesture / browser history back
+  React.useEffect(() => {
+    const handlePopState = () => {
+      setActiveConversationId(null);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [setActiveConversationId]);
 
   React.useEffect(() => {
     if (!isLoading && !user) {

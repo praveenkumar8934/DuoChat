@@ -92,7 +92,11 @@ export function ConversationHeader() {
               type="button"
               onClick={() => {
                 setActiveConversationId(null);
-                router.push('/chat');
+                if (typeof window !== 'undefined' && window.history.state?.chat) {
+                  window.history.back();
+                } else {
+                  router.push('/chat');
+                }
               }}
               className="md:hidden p-2 -ml-1 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
               aria-label="Back to conversations list"

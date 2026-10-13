@@ -5,6 +5,7 @@ import {
   generateSecureToken,
   hashToken,
   formatLastSeen,
+  computeMessageDeliveryStatus,
 } from '@/lib/utils';
 
 describe('Utility Functions', () => {
@@ -77,6 +78,65 @@ describe('Utility Functions', () => {
     it('returns formatted date for activities older than 7 days', () => {
       const twentyDaysAgo = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000);
       expect(formatLastSeen(twentyDaysAgo.toISOString())).toMatch(/^Active on [A-Za-z]+ \d+$/);
+    });
+  });
+
+  describe('computeMessageDeliveryStatus', () => {
+    const msgTime = new Date('2026-10-14T02:00:00Z').toISOString();
+
+    it('returns "sent" (single tick) when partner is offline and no receipts exist', () => {
+      const status = computeMessageDeliveryStatus({
+        receipts: [],
+        partnerLastReadAt: null,
+        messageCreatedAt: msgTime,
+        isPartnerOnline: false,
+      });
+      expect(status).toBe('sent');
+    });
+
+    it('returns "delivered" (double tick) when partner is online', () => {
+      const status = computeMessageDeliveryStatus({
+        receipts: [],
+        partnerLastReadAt: null,
+        messageCreatedAt: msgTime,
+        isPartnerOnline: true,
+      });
+      expect(status).toBe('delivered');
+    });
+
+    it('returns "delivered" (double tick) when delivered_at receipt exists even if partner is offline', () => {
+      const status = computeMessageDeliveryStatus({
+        receipts: [{ delivered_at: new Date('2026-10-14T02:00:05Z').toISOString(), read_at: null }],
+        partnerLastReadAt: null,
+        messageCreatedAt: msgTime,
+        isPartnerOnline: false,
+      });
+      expect(status).toBe('delivered');
+    });
+
+    it('returns "read" (double blue tick) when read_at receipt exists', () => {
+      const status = computeMessageDeliveryStatus({
+        receipts: [
+          {
+            delivered_at: new Date('2026-10-14T02:00:05Z').toISOString(),
+            read_at: new Date('2026-10-14T02:00:10Z').toISOString(),
+          },
+        ],
+        partnerLastReadAt: null,
+        messageCreatedAt: msgTime,
+        isPartnerOnline: true,
+      });
+      expect(status).toBe('read');
+    });
+
+    it('returns "read" (double blue tick) when partner last_read_at is after message creation time', () => {
+      const status = computeMessageDeliveryStatus({
+        receipts: [],
+        partnerLastReadAt: new Date('2026-10-14T02:05:00Z').toISOString(),
+        messageCreatedAt: msgTime,
+        isPartnerOnline: false,
+      });
+      expect(status).toBe('read');
     });
   });
 });

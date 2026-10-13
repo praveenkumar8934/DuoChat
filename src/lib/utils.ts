@@ -49,6 +49,33 @@ export function formatChatListItemTime(dateString?: string | null): string {
   }
 }
 
+export function computeMessageDeliveryStatus({
+  receipts,
+  partnerLastReadAt,
+  messageCreatedAt,
+  isPartnerOnline,
+}: {
+  receipts?: { read_at?: string | null; delivered_at?: string | null }[] | null;
+  partnerLastReadAt?: string | null;
+  messageCreatedAt: string;
+  isPartnerOnline: boolean;
+}): 'sent' | 'delivered' | 'read' {
+  const hasReadReceipt = (receipts || []).some(r => !!r.read_at);
+  const otherLastRead = partnerLastReadAt ? new Date(partnerLastReadAt).getTime() : 0;
+  const msgCreated = new Date(messageCreatedAt).getTime();
+
+  if (hasReadReceipt || (otherLastRead > 0 && otherLastRead >= msgCreated)) {
+    return 'read';
+  }
+
+  const hasDeliveredReceipt = (receipts || []).some(r => !!r.delivered_at);
+  if (hasDeliveredReceipt || isPartnerOnline) {
+    return 'delivered';
+  }
+
+  return 'sent';
+}
+
 export function formatMessageDate(dateString: string): string {
   try {
     const date = new Date(dateString);
