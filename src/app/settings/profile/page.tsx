@@ -15,8 +15,10 @@ import {
   ShieldCheck,
   Eye,
   EyeOff,
-  RefreshCw,
   AlertTriangle,
+  Pencil,
+  Wand2,
+  Trash2,
 } from 'lucide-react';
 import { profileUpdateSchema, ProfileUpdateFormData } from '@/lib/validations/auth';
 import { useAuth } from '@/context/auth-context';
@@ -27,6 +29,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog } from '@/components/ui/dialog';
 import { formatDuoId } from '@/lib/duo-id';
 import { toast } from '@/components/ui/toast';
+import { generateSecretKey } from '@/lib/secret-key';
 
 export default function ProfileSettingsPage() {
   const { profile, updateProfile } = useAuth();
@@ -40,10 +43,16 @@ export default function ProfileSettingsPage() {
   const [secretKey, setSecretKey] = React.useState<string | null>(null);
   const [hasSecretKey, setHasSecretKey] = React.useState<boolean>(false);
   const [isLoadingKey, setIsLoadingKey] = React.useState<boolean>(true);
-  const [isGeneratingKey, setIsGeneratingKey] = React.useState<boolean>(false);
-  const [showSecretKey, setShowSecretKey] = React.useState<boolean>(false);
+  const [isSavingKey, setIsSavingKey] = React.useState<boolean>(false);
+  const [isDeletingKey, setIsDeletingKey] = React.useState<boolean>(false);
+  const [isEditingKey, setIsEditingKey] = React.useState<boolean>(false);
+
+  // User input for secret key
+  const [inputSecretKey, setInputSecretKey] = React.useState<string>('');
+  const [showInputKey, setShowInputKey] = React.useState<boolean>(true);
+  const [showSavedKey, setShowSavedKey] = React.useState<boolean>(false);
   const [copiedSecretKey, setCopiedSecretKey] = React.useState(false);
-  const [showRegenerateConfirm, setShowRegenerateConfirm] = React.useState<boolean>(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState<boolean>(false);
 
   const duoId = formatDuoId(profile);
 
@@ -59,8 +68,12 @@ export default function ProfileSettingsPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        setHasSecretKey(!!data.hasKey);
+        const hasKey = !!data.hasKey;
+        setHasSecretKey(hasKey);
         setSecretKey(data.secretKey || null);
+        if (!hasKey) {
+          setIsEditingKey(true);
+        }
       }
     } catch (err) {
       console.warn('Failed to load secret key:', err);
@@ -73,30 +86,86 @@ export default function ProfileSettingsPage() {
     fetchSecretKey();
   }, [fetchSecretKey]);
 
-  const handleGenerateSecretKey = async () => {
+  // Save user-created secret key
+  const handleSaveSecretKey = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!profile?.id) return;
-    setIsGeneratingKey(true);
+
+    const trimmed = inputSecretKey.trim();
+    if (!trimmed) {
+      toast.error('Please enter a Secret Key.');
+      return;
+    }
+    if (trimmed.length < 4) {
+      toast.error('Secret Key must be at least 4 characters long.');
+      return;
+    }
+    if (trimmed.length > 64) {
+      toast.error('Secret Key cannot exceed 64 characters.');
+      return;
+    }
+
+    setIsSavingKey(true);
     try {
       const res = await fetch('/api/auth/secret-key', {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': profile.id,
+        },
+        body: JSON.stringify({ secretKey: trimmed }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to save secret key');
+      } else {
+        setHasSecretKey(true);
+        setSecretKey(data.secretKey);
+        setIsEditingKey(false);
+        setInputSecretKey('');
+        toast.success('Your Secret Key has been saved! You can now use it to log in.');
+      }
+    } catch {
+      toast.error('Could not connect to server to save key');
+    } finally {
+      setIsSavingKey(false);
+    }
+  };
+
+  // Suggest a random key into the user's input
+  const handleSuggestRandomKey = () => {
+    const suggested = generateSecretKey();
+    setInputSecretKey(suggested);
+    setShowInputKey(true);
+    toast.info('Suggested random key inserted. You can use it or modify it!');
+  };
+
+  // Delete/Revoke Secret Key
+  const handleDeleteSecretKey = async () => {
+    if (!profile?.id) return;
+    setIsDeletingKey(true);
+    try {
+      const res = await fetch('/api/auth/secret-key', {
+        method: 'DELETE',
         headers: {
           'x-user-id': profile.id,
         },
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.error || 'Failed to generate secret key');
+        toast.error(data.error || 'Failed to remove secret key');
       } else {
-        setHasSecretKey(true);
-        setSecretKey(data.secretKey);
-        setShowSecretKey(true);
-        setShowRegenerateConfirm(false);
-        toast.success('New Secret Key created! Save it safely.');
+        setHasSecretKey(false);
+        setSecretKey(null);
+        setShowDeleteConfirm(false);
+        setIsEditingKey(true);
+        setInputSecretKey('');
+        toast.success('Secret Key removed successfully.');
       }
     } catch {
-      toast.error('Could not connect to server to generate key');
+      toast.error('Could not connect to server');
     } finally {
-      setIsGeneratingKey(false);
+      setIsDeletingKey(false);
     }
   };
 
@@ -260,14 +329,14 @@ export default function ProfileSettingsPage() {
           </div>
         </form>
 
-        {/* Instant Login Secret Key Section */}
+        {/* User-Created Secret Key Section */}
         <div className="pt-6 border-t border-border/60 space-y-4">
           <div className="flex items-start justify-between">
             <div>
               <div className="flex items-center gap-2">
                 <h4 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
                   <KeyRound className="w-4 h-4 text-primary" />
-                  Instant Login Secret Key
+                  Your Personal Secret Key
                 </h4>
                 {hasSecretKey ? (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
@@ -276,12 +345,12 @@ export default function ProfileSettingsPage() {
                   </span>
                 ) : (
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                    Not Generated
+                    Not Set
                   </span>
                 )}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Log in quickly on any phone, tablet, or browser with just your personal Secret Key — no password required.
+                Create your own Secret Key. You can use it on the sign-in page to log in instantly on any device without passwords or emails.
               </p>
             </div>
           </div>
@@ -290,20 +359,21 @@ export default function ProfileSettingsPage() {
             <div className="p-4 rounded-2xl bg-muted/40 text-xs text-muted-foreground animate-pulse">
               Checking Secret Key status...
             </div>
-          ) : hasSecretKey && secretKey ? (
+          ) : hasSecretKey && !isEditingKey && secretKey ? (
+            /* VIEW MODE: Show Existing Secret Key */
             <div className="p-4 rounded-2xl bg-card border border-border/80 shadow-xs space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                  Your Personal Key
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Active Secret Key
                 </span>
                 <div className="flex items-center gap-1.5">
                   <button
                     type="button"
-                    onClick={() => setShowSecretKey(!showSecretKey)}
+                    onClick={() => setShowSavedKey(!showSavedKey)}
                     className="px-2.5 py-1 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1.5 cursor-pointer"
                   >
-                    {showSecretKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                    <span>{showSecretKey ? 'Hide' : 'Reveal'}</span>
+                    {showSavedKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    <span>{showSavedKey ? 'Hide' : 'Reveal'}</span>
                   </button>
                   <button
                     type="button"
@@ -319,54 +389,129 @@ export default function ProfileSettingsPage() {
               {/* Secret Key Display Box */}
               <div className="p-3 rounded-xl bg-muted/50 border border-border/60 flex items-center justify-between">
                 <span className="font-mono text-sm sm:text-base font-bold tracking-wider text-foreground select-all">
-                  {showSecretKey ? secretKey : 'DUO-SEC-••••-••••-••••'}
+                  {showSavedKey ? secretKey : '••••••••••••••••'}
                 </span>
               </div>
 
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
                 <p className="text-[11px] text-muted-foreground flex items-center gap-1">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                  Keep this safe. Anyone with this key can log into your account.
+                  Keep this safe. Anyone with this key can log into your DuoChat account.
                 </p>
-                <button
-                  type="button"
-                  onClick={() => setShowRegenerateConfirm(true)}
-                  className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer self-start sm:self-auto"
-                >
-                  <RefreshCw className="w-3 h-3" />
-                  <span>Regenerate Key</span>
-                </button>
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInputSecretKey(secretKey);
+                      setIsEditingKey(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-muted hover:bg-muted/80 text-foreground transition-colors cursor-pointer"
+                  >
+                    <Pencil className="w-3 h-3" />
+                    <span>Change Key</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Remove</span>
+                  </button>
+                </div>
               </div>
             </div>
           ) : (
-            <div className="p-4 rounded-2xl bg-primary/5 border border-primary/20 space-y-3">
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                You haven&apos;t created a Secret Key yet. Create one now to enable lightning-fast 1-click logins on any device without typing passwords.
-              </p>
-              <Button
-                type="button"
-                onClick={handleGenerateSecretKey}
-                isLoading={isGeneratingKey}
-                className="rounded-xl font-medium gap-1.5 cursor-pointer"
-              >
-                <KeyRound className="w-4 h-4" />
-                Create Secret Key
-              </Button>
-            </div>
+            /* EDIT / CREATE MODE: User types their custom key */
+            <form onSubmit={handleSaveSecretKey} className="p-4 rounded-2xl bg-card border border-border/80 shadow-xs space-y-4">
+              <div>
+                <h5 className="text-xs font-bold text-foreground">
+                  {hasSecretKey ? 'Update Your Secret Key' : 'Create Your Secret Key'}
+                </h5>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Type any memorable phrase, code, or secret word (minimum 4 characters) that you will use to log in fast.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-foreground">
+                    Secret Key
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleSuggestRandomKey}
+                    className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline font-medium cursor-pointer"
+                  >
+                    <Wand2 className="w-3 h-3" />
+                    Suggest random key
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <Input
+                    type={showInputKey ? 'text' : 'password'}
+                    placeholder="Enter your secret key (e.g. my_super_secret_code)"
+                    value={inputSecretKey}
+                    onChange={(e) => setInputSecretKey(e.target.value)}
+                    leftIcon={<KeyRound className="w-4 h-4 text-muted-foreground" />}
+                    rightIcon={
+                      <button
+                        type="button"
+                        onClick={() => setShowInputKey(!showInputKey)}
+                        className="text-muted-foreground hover:text-foreground cursor-pointer"
+                        aria-label={showInputKey ? 'Hide key' : 'Show key'}
+                      >
+                        {showInputKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    }
+                    className="rounded-xl font-mono text-sm"
+                    autoFocus
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Must be between 4 and 64 characters. You can use letters, numbers, and symbols.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <Button
+                  type="submit"
+                  isLoading={isSavingKey}
+                  className="rounded-xl font-medium gap-1.5 cursor-pointer"
+                >
+                  <KeyRound className="w-4 h-4" />
+                  Save Secret Key
+                </Button>
+                {hasSecretKey && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setIsEditingKey(false);
+                      setInputSecretKey('');
+                    }}
+                    className="rounded-xl cursor-pointer"
+                  >
+                    Cancel
+                  </Button>
+                )}
+              </div>
+            </form>
           )}
 
-          {/* Regenerate Confirmation Modal */}
+          {/* Delete Confirmation Modal */}
           <Dialog
-            isOpen={showRegenerateConfirm}
-            onClose={() => setShowRegenerateConfirm(false)}
-            title="Regenerate Secret Key"
-            description="Are you sure you want to generate a new Secret Key?"
+            isOpen={showDeleteConfirm}
+            onClose={() => setShowDeleteConfirm(false)}
+            title="Remove Secret Key"
+            description="Are you sure you want to remove your personal Secret Key?"
           >
             <div className="space-y-4 pt-1">
               <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2.5">
                 <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                 <p className="leading-relaxed">
-                  Generating a new key will <strong>immediately deactivate</strong> your current Secret Key. Any saved shortcuts using the old key will stop working.
+                  Removing your Secret Key means you will no longer be able to log in with it. You can create a new one at any time.
                 </p>
               </div>
 
@@ -374,18 +519,18 @@ export default function ProfileSettingsPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setShowRegenerateConfirm(false)}
+                  onClick={() => setShowDeleteConfirm(false)}
                   className="rounded-xl cursor-pointer"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="button"
-                  onClick={handleGenerateSecretKey}
-                  isLoading={isGeneratingKey}
+                  onClick={handleDeleteSecretKey}
+                  isLoading={isDeletingKey}
                   className="rounded-xl bg-destructive hover:bg-destructive/90 text-destructive-foreground cursor-pointer"
                 >
-                  Yes, Regenerate Key
+                  Yes, Remove Key
                 </Button>
               </div>
             </div>

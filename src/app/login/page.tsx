@@ -47,6 +47,7 @@ function LoginForm() {
 
   // Secret Key form state
   const [secretKeyInput, setSecretKeyInput] = React.useState(initialKey);
+  const [showSecretKeyInput, setShowSecretKeyInput] = React.useState(true);
   const [isSecretKeyLoading, setIsSecretKeyLoading] = React.useState(false);
 
   const {
@@ -359,7 +360,7 @@ function LoginForm() {
                     <span>Instant Passwordless Access</span>
                   </div>
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Paste your personal DuoChat Secret Key below to jump straight into your chat without passwords or email confirmation.
+                    Enter the personal Secret Key you created in your profile settings to jump straight into DuoChat without passwords.
                   </p>
                 </div>
 
@@ -379,16 +380,26 @@ function LoginForm() {
                   </div>
 
                   <Input
-                    type="text"
-                    placeholder="DUO-SEC-XXXX-XXXX-XXXX-XXXX"
+                    type={showSecretKeyInput ? 'text' : 'password'}
+                    placeholder="Enter your Secret Key"
                     value={secretKeyInput}
-                    onChange={(e) => setSecretKeyInput(e.target.value.toUpperCase())}
+                    onChange={(e) => setSecretKeyInput(e.target.value)}
                     leftIcon={<KeyRound className="w-4 h-4 text-muted-foreground" />}
-                    className="rounded-xl font-mono tracking-wider uppercase text-sm"
+                    rightIcon={
+                      <button
+                        type="button"
+                        onClick={() => setShowSecretKeyInput(!showSecretKeyInput)}
+                        className="text-muted-foreground hover:text-foreground cursor-pointer"
+                        aria-label={showSecretKeyInput ? 'Hide secret key' : 'Show secret key'}
+                      >
+                        {showSecretKeyInput ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    }
+                    className="rounded-xl font-mono text-sm"
                     autoFocus
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    Accepts format: DUO-SEC-XXXX-XXXX-XXXX-XXXX or raw 16 characters.
+                    Enter the secret phrase or key you saved in your Profile.
                   </p>
                 </div>
 
@@ -411,7 +422,7 @@ function LoginForm() {
                   >
                     Use Password instead
                   </button>
-                  , or generate one anytime in your Profile Settings.
+                  , or create one in your Profile Settings after signing in.
                 </div>
               </form>
             )}

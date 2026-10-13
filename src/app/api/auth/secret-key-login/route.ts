@@ -35,10 +35,10 @@ export async function POST(req: Request) {
       );
     }
 
-    const normalizedKey = normalizeSecretKey(rawKey);
-    if (!normalizedKey || normalizedKey.length < 10) {
+    const cleanKey = rawKey.trim();
+    if (cleanKey.length < 4) {
       return NextResponse.json(
-        { error: 'Invalid Secret Key format. Expected format: DUO-SEC-XXXX-XXXX-XXXX-XXXX' },
+        { error: 'Please enter a valid Secret Key (at least 4 characters).' },
         { status: 400 }
       );
     }
@@ -55,28 +55,51 @@ export async function POST(req: Request) {
       auth: { persistSession: false },
     });
 
-    // 3. Find Secret Key in database
-    const tokenHash = `sec:${normalizedKey}`;
-    const { data: keyRow, error: queryError } = await adminClient
+    // 3. Find Secret Key in database (exact, normalized, or case-insensitive)
+    let keyRow = null;
+
+    // Check exact match
+    const { data: exactMatch } = await adminClient
       .from('invitations')
       .select('id, created_by, expires_at, revoked_at')
-      .eq('token_hash', tokenHash)
+      .eq('token_hash', `sec:${cleanKey}`)
       .is('revoked_at', null)
       .maybeSingle();
 
-    if (queryError) {
-      console.error('Error querying secret key:', queryError);
-      return NextResponse.json(
-        { error: 'Authentication service error. Please try again.' },
-        { status: 500 }
-      );
+    keyRow = exactMatch;
+
+    // Check normalized match if not found
+    if (!keyRow) {
+      const normalizedKey = normalizeSecretKey(cleanKey);
+      if (normalizedKey && normalizedKey !== cleanKey) {
+        const { data: normMatch } = await adminClient
+          .from('invitations')
+          .select('id, created_by, expires_at, revoked_at')
+          .eq('token_hash', `sec:${normalizedKey}`)
+          .is('revoked_at', null)
+          .maybeSingle();
+
+        keyRow = normMatch;
+      }
+    }
+
+    // Check case-insensitive match if still not found
+    if (!keyRow) {
+      const { data: ciMatch } = await adminClient
+        .from('invitations')
+        .select('id, created_by, expires_at, revoked_at')
+        .ilike('token_hash', `sec:${cleanKey}`)
+        .is('revoked_at', null)
+        .maybeSingle();
+
+      keyRow = ciMatch;
     }
 
     if (!keyRow) {
       return NextResponse.json(
         {
           error:
-            'Invalid or revoked Secret Key. Please check the key carefully or sign in with your email and password.',
+            'Invalid Secret Key. Please check the key you created in your profile, or sign in with your email and password.',
         },
         { status: 401 }
       );

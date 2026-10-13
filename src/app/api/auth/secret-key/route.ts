@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient as createServerSupabase } from '@/lib/supabase/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { env } from '@/lib/env';
-import { generateSecretKey } from '@/lib/secret-key';
+import { generateSecretKey, isValidSecretKeyFormat } from '@/lib/secret-key';
 
 export async function GET(req: Request) {
   try {
@@ -109,9 +109,47 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'User profile not found' }, { status: 404 });
     }
 
-    // Generate new secure secret key
-    const newSecretKey = generateSecretKey();
-    const tokenHash = `sec:${newSecretKey}`;
+    // Read user-provided secret key from request body
+    const body = await req.json().catch(() => ({}));
+    const rawKey = typeof body?.secretKey === 'string' ? body.secretKey.trim() : '';
+
+    let chosenKey = '';
+    if (rawKey) {
+      if (rawKey.length < 4) {
+        return NextResponse.json(
+          { error: 'Secret Key must be at least 4 characters long.' },
+          { status: 400 }
+        );
+      }
+      if (rawKey.length > 64) {
+        return NextResponse.json(
+          { error: 'Secret Key cannot exceed 64 characters.' },
+          { status: 400 }
+        );
+      }
+
+      // Check if another user has already taken this key
+      const { data: conflict } = await adminClient
+        .from('invitations')
+        .select('id, created_by')
+        .ilike('token_hash', `sec:${rawKey}`)
+        .neq('created_by', userId)
+        .maybeSingle();
+
+      if (conflict) {
+        return NextResponse.json(
+          { error: 'This Secret Key is already in use by another account. Please choose a different, more unique key.' },
+          { status: 409 }
+        );
+      }
+
+      chosenKey = rawKey;
+    } else {
+      // Optional fallback: generate a random suggestion if no key provided
+      chosenKey = generateSecretKey();
+    }
+
+    const tokenHash = `sec:${chosenKey}`;
 
     // Clean up any existing secret keys for this user
     await adminClient
@@ -136,7 +174,7 @@ export async function POST(req: Request) {
     // Also update auth.users user_metadata for redundancy
     try {
       await adminClient.auth.admin.updateUserById(userId, {
-        user_metadata: { secret_key: newSecretKey },
+        user_metadata: { secret_key: chosenKey },
       });
     } catch {
       // Non-blocking
@@ -145,8 +183,8 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       hasKey: true,
-      secretKey: newSecretKey,
-      message: 'New Secret Key generated successfully! Save it in a safe place.',
+      secretKey: chosenKey,
+      message: 'Secret Key saved successfully! You can now use it to log in.',
     });
   } catch (err: any) {
     console.error('Error in secret-key POST:', err);
@@ -203,7 +241,7 @@ export async function DELETE(req: Request) {
       success: true,
       hasKey: false,
       secretKey: null,
-      message: 'Secret key revoked successfully',
+      message: 'Secret key removed successfully',
     });
   } catch (err: any) {
     console.error('Error in secret-key DELETE:', err);
