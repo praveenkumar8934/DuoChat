@@ -31,6 +31,24 @@ export function formatMessageTime(dateString: string): string {
   }
 }
 
+export function formatChatListItemTime(dateString?: string | null): string {
+  if (!dateString) return '';
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return '';
+    if (isToday(date)) return format(date, 'h:mm a');
+    if (isYesterday(date)) return 'Yesterday';
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays < 7) {
+      return format(date, 'EEEE');
+    }
+    return format(date, 'dd/MM/yy');
+  } catch {
+    return '';
+  }
+}
+
 export function formatMessageDate(dateString: string): string {
   try {
     const date = new Date(dateString);

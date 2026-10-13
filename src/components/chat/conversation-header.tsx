@@ -23,10 +23,13 @@ import { toast } from '@/components/ui/toast';
 import { useRomanticFeatures } from '@/lib/romantic-features';
 import { Dialog } from '@/components/ui/dialog';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export function ConversationHeader() {
+  const router = useRouter();
   const {
     activeConversation,
+    setActiveConversationId,
     friendPresence,
     isSearching,
     setIsSearching,
@@ -85,13 +88,17 @@ export function ConversationHeader() {
         <div className="flex items-center justify-between px-3 sm:px-4 py-2.5">
           <div className="flex items-center gap-3 min-w-0">
             {/* Mobile Back Button */}
-            <Link
-              href="/chat"
-              className="md:hidden p-2 -ml-1 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            <button
+              type="button"
+              onClick={() => {
+                setActiveConversationId(null);
+                router.push('/chat');
+              }}
+              className="md:hidden p-2 -ml-1 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
               aria-label="Back to conversations list"
             >
               <ArrowLeft className="w-5 h-5" />
-            </Link>
+            </button>
 
             {/* Friend Avatar with presence ring */}
             <div className="relative">

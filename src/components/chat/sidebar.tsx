@@ -12,14 +12,17 @@ import {
   Music,
   Film,
   FileText,
-  Sparkles,
   Heart,
   FolderHeart,
-  CalendarHeart,
   Copy,
   Check,
   X,
   Bell,
+  MoreVertical,
+  User,
+  Shield,
+  Palette,
+  CheckCheck,
 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { useChat } from '@/context/chat-context';
@@ -29,45 +32,81 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { BrandLogo } from '@/components/ui/brand-logo';
 import { InviteModal } from './invite-modal';
 import { NotificationBell } from './notification-bar';
-import { formatMessageTime, cn } from '@/lib/utils';
-import { useRomanticFeatures } from '@/lib/romantic-features';
+import { formatChatListItemTime, formatLastSeen, cn } from '@/lib/utils';
 import { formatDuoId } from '@/lib/duo-id';
+import { toast } from '@/components/ui/toast';
 
 export function Sidebar() {
-  const { profile, signOut, isConfigured } = useAuth();
+  const { profile, signOut } = useAuth();
   const {
     conversations,
     activeConversationId,
     setActiveConversationId,
-    friendPresence,
     isUserOnline,
+    getUserLastSeen,
     setIsMediaDrawerOpen,
     incomingRequests,
     respondToRequest,
+    typingUsers,
   } = useChat();
   const router = useRouter();
 
-  const { daysTogether } = useRomanticFeatures();
   const [isInviteOpen, setIsInviteOpen] = React.useState(false);
   const [filterText, setFilterText] = React.useState('');
   const [copiedId, setCopiedId] = React.useState(false);
+  const [isMenuOpen, setIsMenuOpen] = React.useState(false);
+  const menuRef = React.useRef<HTMLDivElement>(null);
 
   const duoId = formatDuoId(profile);
 
-  const handleCopyDuoId = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  // Close 3-dots menu on click outside or escape key
+  React.useEffect(() => {
+    if (!isMenuOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        setIsMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isMenuOpen]);
+
+  const handleCopyDuoId = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     navigator.clipboard.writeText(duoId);
     setCopiedId(true);
+    toast.success('Duo ID copied to clipboard!');
     setTimeout(() => setCopiedId(false), 2000);
   };
 
-  const filteredConversations = conversations.filter(c => {
-    if (!filterText) return true;
-    const name = c.otherUser?.display_name?.toLowerCase() || '';
-    const user = c.otherUser?.username?.toLowerCase() || '';
-    return name.includes(filterText.toLowerCase()) || user.includes(filterText.toLowerCase());
-  });
+  const filteredConversations = React.useMemo(() => {
+    if (!filterText.trim()) return conversations;
+    const query = filterText.toLowerCase().trim();
+    return conversations.filter(c => {
+      const name = c.otherUser?.display_name?.toLowerCase() || '';
+      const user = c.otherUser?.username?.toLowerCase() || '';
+      const duo = formatDuoId(c.otherUser).toLowerCase();
+      const lastMsg = c.lastMessage?.body?.toLowerCase() || '';
+      return (
+        name.includes(query) ||
+        user.includes(query) ||
+        duo.includes(query) ||
+        lastMsg.includes(query)
+      );
+    });
+  }, [conversations, filterText]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -92,77 +131,192 @@ export function Sidebar() {
   return (
     <>
       <aside className="w-full md:w-80 lg:w-88 flex flex-col h-full bg-sidebar-bg border-r border-border/70 select-none transition-colors">
-        {/* Brand Header */}
-        <div className="p-4 border-b border-border/50 flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <BrandLogo size="md" />
-
-            <div className="flex items-center gap-1.5">
-              <NotificationBell onOpenConnect={() => setIsInviteOpen(true)} />
-
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setIsInviteOpen(true)}
-                className="rounded-xl text-xs gap-1.5 border-primary/20 bg-primary/5 text-primary hover:bg-primary/15 hover:text-primary transition-all cursor-pointer font-medium"
-                title="Connect partner"
-              >
-                <UserPlus className="w-3.5 h-3.5" />
-                <span>Connect</span>
-              </Button>
-            </div>
+        {/* WhatsApp-Style Top Bar */}
+        <div className="px-3.5 sm:px-4 py-3 border-b border-border/50 bg-card/70 backdrop-blur-md flex items-center justify-between gap-2 select-none sticky top-0 z-20">
+          {/* Logo with Name */}
+          <div className="flex items-center gap-2 min-w-0">
+            <BrandLogo size="md" href="/chat" />
           </div>
 
-          {/* Intimate Subtitle Ribbon */}
-          <div className="flex items-center justify-between text-[11px] text-muted-foreground/90 px-0.5">
-            <span className="flex items-center gap-1.5 italic font-serif">
-              <Sparkles className="w-3 h-3 text-primary/70 animate-pulse" />
-              Your little corner of the world
-            </span>
+          {/* Right Action Icons: Notification Bell, Connect Button, 3 Dots */}
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            {/* Notification Bell */}
+            <NotificationBell onOpenConnect={() => setIsInviteOpen(true)} />
 
-            {daysTogether !== null && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-300 font-medium text-[10px] border border-rose-500/20">
-                <Heart className="w-2.5 h-2.5 fill-current" />
-                Day {daysTogether}
-              </span>
-            )}
+            {/* Connect Button */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setIsInviteOpen(true)}
+              className="h-8 px-2.5 sm:px-3 rounded-xl text-xs gap-1.5 border-primary/25 bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary transition-all cursor-pointer font-medium shadow-2xs"
+              title="Connect partner"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span className="font-semibold">Connect</span>
+            </Button>
+
+            {/* 3 Dots Menu Button & Dropdown */}
+            <div className="relative" ref={menuRef}>
+              <button
+                type="button"
+                onClick={() => setIsMenuOpen(prev => !prev)}
+                className={cn(
+                  'p-2 rounded-xl text-muted-foreground hover:text-foreground transition-colors cursor-pointer',
+                  isMenuOpen ? 'bg-muted text-foreground ring-1 ring-border' : 'hover:bg-muted/70'
+                )}
+                title="More options"
+                aria-label="More options"
+                aria-expanded={isMenuOpen}
+              >
+                <MoreVertical className="w-4 h-4" />
+              </button>
+
+              {/* Backdrop to prevent click-through and darken background text */}
+              {isMenuOpen && (
+                <div
+                  className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px]"
+                  onClick={() => setIsMenuOpen(false)}
+                />
+              )}
+
+              {/* 3 Dots Popup Menu */}
+              {isMenuOpen && (
+                <div
+                  style={{ backgroundColor: 'hsl(var(--popover))' }}
+                  className="absolute right-0 top-full mt-2 w-60 rounded-2xl bg-popover border border-border/90 shadow-2xl py-1.5 z-50 text-xs animate-in fade-in zoom-in-95 duration-150 overflow-hidden"
+                >
+                  <div
+                    style={{ backgroundColor: 'hsl(var(--muted))' }}
+                    className="px-3 py-2 border-b border-border/40 mb-1 bg-muted/60"
+                  >
+                    <p className="text-[11px] font-medium text-muted-foreground">Signed in as</p>
+                    <p className="font-semibold text-foreground truncate">{profile?.display_name || 'My Profile'}</p>
+                    <p className="text-[10px] text-primary font-mono">{duoId}</p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      setIsInviteOpen(true);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-muted/80 text-foreground transition-colors cursor-pointer"
+                  >
+                    <UserPlus className="w-4 h-4 text-primary shrink-0" />
+                    <span>Connect Partner</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      setIsMediaDrawerOpen(true);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-muted/80 text-foreground transition-colors cursor-pointer"
+                  >
+                    <FolderHeart className="w-4 h-4 text-rose-500 shrink-0" />
+                    <span>Our Moments</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      handleCopyDuoId(e);
+                      setIsMenuOpen(false);
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-muted/80 text-foreground transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Copy className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <span>Copy My Duo ID</span>
+                    </div>
+                    {copiedId ? (
+                      <span className="text-[10px] text-emerald-500 font-medium">Copied!</span>
+                    ) : (
+                      <span className="text-[10px] font-mono text-muted-foreground">{duoId.slice(0, 8)}...</span>
+                    )}
+                  </button>
+
+                  <div className="border-t border-border/40 my-1" />
+
+                  <Link
+                    href="/settings/profile"
+                    onClick={() => setIsMenuOpen(false)}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-muted/80 text-foreground transition-colors"
+                  >
+                    <User className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <span>Profile & Account</span>
+                  </Link>
+
+                  <Link
+                    href="/settings/appearance"
+                    onClick={() => setIsMenuOpen(false)}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-muted/80 text-foreground transition-colors"
+                  >
+                    <Palette className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <span>Appearance & Theme</span>
+                  </Link>
+
+                  <Link
+                    href="/settings/privacy"
+                    onClick={() => setIsMenuOpen(false)}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-muted/80 text-foreground transition-colors"
+                  >
+                    <Shield className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <span>Privacy & Security</span>
+                  </Link>
+
+                  <div className="border-t border-border/40 my-1" />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      handleSignOut();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-destructive/10 text-destructive transition-colors cursor-pointer font-medium"
+                  >
+                    <LogOut className="w-4 h-4 shrink-0" />
+                    <span>Log Out</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Search Conversations Input */}
-        <div className="px-3 pt-3 pb-1">
+        {/* WhatsApp-Style Search Bar */}
+        <div className="px-3.5 sm:px-4 py-2.5 bg-sidebar-bg/60 border-b border-border/40">
           <div className="relative flex items-center">
-            <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 pointer-events-none" />
+            <Search className="w-4 h-4 text-muted-foreground absolute left-3.5 pointer-events-none" />
             <input
               type="text"
               value={filterText}
               onChange={e => setFilterText(e.target.value)}
-              placeholder="Search conversations..."
-              className="w-full pl-9 pr-3 py-2 rounded-xl text-xs bg-background/60 border border-input focus:outline-none focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground transition-all"
+              placeholder="Search friends or chats..."
+              className="w-full pl-10 pr-9 py-2 rounded-full text-xs sm:text-sm bg-muted/60 hover:bg-muted/80 focus:bg-background border border-border/60 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground transition-all shadow-2xs"
             />
+            {filterText && (
+              <button
+                type="button"
+                onClick={() => setFilterText('')}
+                className="absolute right-3 p-1 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                aria-label="Clear search"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Quick Couple Shortcuts: Our Moments */}
-        <div className="px-3 py-1.5 flex items-center gap-1.5">
-          <button
-            onClick={() => setIsMediaDrawerOpen(true)}
-            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/70 border border-transparent hover:border-border/50 transition-all cursor-pointer"
-            title="Open Our Moments gallery"
-          >
-            <FolderHeart className="w-3.5 h-3.5 text-primary" />
-            <span>Our Moments</span>
-          </button>
-        </div>
-
-        {/* Conversations List */}
-        <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+        {/* All Friends / Chats List */}
+        <div className="flex-1 overflow-y-auto divide-y divide-border/20">
           {/* Pending Connection Requests Banner in Sidebar */}
           {incomingRequests.length > 0 && (
-            <div className="space-y-1.5 mb-2">
-              <div className="flex items-center justify-between px-1 text-[11px] font-semibold text-primary">
-                <span className="flex items-center gap-1">
-                  <Bell className="w-3 h-3 text-rose-500 animate-bounce" />
+            <div className="p-3 bg-gradient-to-r from-rose-500/10 via-primary/10 to-pink-500/10 border-b border-primary/25 space-y-2">
+              <div className="flex items-center justify-between text-[11px] font-semibold text-primary">
+                <span className="flex items-center gap-1.5">
+                  <Bell className="w-3.5 h-3.5 text-rose-500 animate-bounce" />
                   Connection Requests ({incomingRequests.length})
                 </span>
               </div>
@@ -172,7 +326,7 @@ export function Sidebar() {
                 return (
                   <div
                     key={req.id}
-                    className="p-2.5 rounded-2xl bg-gradient-to-r from-rose-500/10 via-primary/10 to-pink-500/10 border border-primary/25 space-y-2 shadow-xs"
+                    className="p-2.5 rounded-2xl bg-card/80 border border-primary/20 space-y-2 shadow-xs"
                   >
                     <div className="flex items-center gap-2.5">
                       <Avatar
@@ -215,47 +369,72 @@ export function Sidebar() {
             </div>
           )}
 
+          {/* Filtered Friends List */}
           {filteredConversations.length === 0 ? (
-            <div className="p-6 text-center text-muted-foreground space-y-2">
-              <div className="w-10 h-10 rounded-full bg-primary/10 text-primary mx-auto flex items-center justify-center">
-                <Heart className="w-5 h-5" />
+            filterText.trim() ? (
+              <div className="p-8 text-center text-muted-foreground space-y-2">
+                <Search className="w-8 h-8 mx-auto opacity-40 text-muted-foreground" />
+                <p className="text-xs font-semibold text-foreground">No friends found</p>
+                <p className="text-[11px] text-muted-foreground">
+                  No friend in your list matches &ldquo;{filterText}&rdquo;
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFilterText('')}
+                  className="mt-2 text-xs rounded-xl"
+                >
+                  Clear search
+                </Button>
               </div>
-              <p className="text-xs font-medium text-foreground">No conversations yet</p>
-              <p className="text-[11px] text-muted-foreground max-w-[200px] mx-auto">
-                Share your unique Duo ID or enter your partner's ID to start chatting.
-              </p>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => setIsInviteOpen(true)}
-                className="mt-2 text-xs rounded-xl shadow-sm"
-              >
-                <UserPlus className="w-3.5 h-3.5 mr-1.5" />
-                Connect Partner
-              </Button>
-            </div>
+            ) : (
+              <div className="p-8 text-center text-muted-foreground space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary mx-auto flex items-center justify-center">
+                  <Heart className="w-6 h-6" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-foreground">No friends yet</p>
+                  <p className="text-xs text-muted-foreground max-w-[220px] mx-auto leading-relaxed">
+                    Share your Duo ID or connect with your partner to start chatting.
+                  </p>
+                </div>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => setIsInviteOpen(true)}
+                  className="rounded-xl text-xs shadow-xs gap-1.5"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  Connect Partner
+                </Button>
+              </div>
+            )
           ) : (
             filteredConversations.map(conv => {
               const other = conv.otherUser;
               const isActive = conv.id === activeConversationId;
               const isOtherOnline = other?.id ? isUserOnline(other.id) : false;
+              const isFriendTyping = other?.display_name && typingUsers.includes(other.display_name);
+              const friendLastSeen = other?.id ? (getUserLastSeen(other.id) || other.last_seen_at) : other?.last_seen_at;
+              const isLastMsgFromMe = conv.lastMessage?.sender_id === profile?.id;
 
               return (
                 <div
                   key={conv.id}
                   onClick={() => setActiveConversationId(conv.id)}
                   className={cn(
-                    'flex items-center gap-3 p-3 rounded-2xl cursor-pointer transition-all duration-150 relative group',
+                    'flex items-center gap-3 px-3.5 sm:px-4 py-3 cursor-pointer transition-colors relative group',
                     isActive
-                      ? 'bg-card border border-rose-200/60 dark:border-rose-900/40 shadow-xs text-card-foreground'
-                      : 'hover:bg-muted/50 text-muted-foreground hover:text-foreground'
+                      ? 'bg-card/90 shadow-2xs'
+                      : 'hover:bg-muted/50 active:bg-muted/70'
                   )}
                 >
-                  {/* Subtle active left glow line */}
+                  {/* Subtle active left highlight strip */}
                   {isActive && (
-                    <div className="absolute left-1.5 top-3 bottom-3 w-1 rounded-full bg-primary" />
+                    <div className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-primary" />
                   )}
 
+                  {/* Friend Avatar with online indicator */}
                   <Avatar
                     src={other?.avatar_path}
                     name={other?.display_name || 'Partner'}
@@ -264,34 +443,63 @@ export function Sidebar() {
                     className="shrink-0"
                   />
 
+                  {/* Friend Info & Last Message */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-0.5">
-                      <h4
+                      <h4 className="text-sm font-semibold truncate text-foreground flex items-center gap-1.5">
+                        <span>{other?.display_name || 'Partner'}</span>
+                        {other?.username && (
+                          <span className="text-[10px] text-muted-foreground font-normal font-mono hidden sm:inline">
+                            @{other.username}
+                          </span>
+                        )}
+                      </h4>
+
+                      {/* Timestamp */}
+                      <span
                         className={cn(
-                          'text-xs font-semibold truncate flex items-center gap-1',
-                          isActive ? 'text-foreground font-bold' : 'text-foreground/90'
+                          'text-[11px] shrink-0 font-medium ml-2',
+                          conv.unreadCount > 0 ? 'text-emerald-500 font-semibold' : 'text-muted-foreground'
                         )}
                       >
-                        {other?.display_name || 'My Partner'}
-                      </h4>
-                      {conv.lastMessage && (
-                        <span className="text-[10px] text-muted-foreground shrink-0 font-mono">
-                          {formatMessageTime(conv.lastMessage.created_at)}
-                        </span>
-                      )}
+                        {formatChatListItemTime(conv.lastMessage?.created_at)}
+                      </span>
                     </div>
 
                     <div className="flex items-center justify-between text-xs">
-                      <p className="truncate text-[11px] text-muted-foreground max-w-[170px]">
-                        {getMediaPreviewIcon(conv.lastMessage?.message_type)}
-                        {conv.lastMessage?.body?.startsWith('[💌 Note]')
-                          ? '💌 Sent a Little Note'
-                          : conv.lastMessage?.body ||
-                            conv.lastMessage?.original_filename ||
-                            (conv.lastMessage?.message_type ? `[${conv.lastMessage.message_type}]` : 'Say hello!')}
-                      </p>
+                      {/* Subtitle / Last Message Preview */}
+                      <div className="truncate text-xs text-muted-foreground max-w-[200px] sm:max-w-[180px] flex items-center">
+                        {isFriendTyping ? (
+                          <span className="text-emerald-500 font-medium flex items-center gap-1 animate-pulse">
+                            <span>typing</span>
+                            <span className="inline-block animate-bounce">...</span>
+                          </span>
+                        ) : conv.lastMessage ? (
+                          <>
+                            {isLastMsgFromMe && (
+                              <CheckCheck className="w-3.5 h-3.5 text-muted-foreground shrink-0 inline mr-1" />
+                            )}
+                            {getMediaPreviewIcon(conv.lastMessage?.message_type)}
+                            <span className="truncate">
+                              {conv.lastMessage?.body?.startsWith('[💌 Note]')
+                                ? '💌 Little Note'
+                                : conv.lastMessage?.body ||
+                                  conv.lastMessage?.original_filename ||
+                                  (conv.lastMessage?.message_type ? `[${conv.lastMessage.message_type}]` : 'Message')}
+                            </span>
+                          </>
+                        ) : isOtherOnline ? (
+                          <span className="text-emerald-500 font-medium">Online now</span>
+                        ) : (
+                          <span className="text-muted-foreground/80">
+                            {formatLastSeen(friendLastSeen)}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Unread badge */}
                       {conv.unreadCount > 0 && (
-                        <span className="ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-primary text-primary-foreground shadow-xs">
+                        <span className="ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500 text-white min-w-[18px] text-center shadow-xs shrink-0">
                           {conv.unreadCount}
                         </span>
                       )}
@@ -303,8 +511,8 @@ export function Sidebar() {
           )}
         </div>
 
-        {/* User Footer Profile & Controls */}
-        <div className="p-3 border-t border-border/60 bg-card/40 flex items-center justify-between gap-1">
+        {/* User Footer Profile & Quick Access */}
+        <div className="p-3 border-t border-border/60 bg-card/50 flex items-center justify-between gap-1 select-none">
           <Link
             href="/settings/profile"
             className="flex items-center gap-2.5 min-w-0 p-1.5 rounded-xl hover:bg-muted/70 transition-colors flex-1"

@@ -250,9 +250,9 @@ export function NotificationBell({ onOpenConnect, className }: NotificationBellP
       {/* Popover Dropdown Window with Clamped Boundary */}
       {isOpen && (
         <>
-          {/* Backdrop on mobile for easy dismissal */}
+          {/* Backdrop on all screens to darken background and prevent see-through / click-through */}
           <div
-            className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px] sm:hidden"
+            className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px]"
             onClick={() => setIsOpen(false)}
           />
 
@@ -264,11 +264,15 @@ export function NotificationBell({ onOpenConnect, className }: NotificationBellP
               left: coords ? `${coords.left}px` : '12px',
               width: coords ? `${coords.width}px` : 'calc(100vw - 24px)',
               maxHeight: coords ? `min(540px, calc(100vh - ${coords.top + 16}px))` : '500px',
+              backgroundColor: 'hsl(var(--card))',
             }}
-            className="fixed z-50 rounded-2xl bg-card/95 border border-border/80 shadow-2xl overflow-hidden backdrop-blur-xl flex flex-col animate-in fade-in-0 zoom-in-95 duration-150 select-none"
+            className="fixed z-50 rounded-2xl bg-card border border-border/90 shadow-2xl overflow-hidden flex flex-col animate-in fade-in-0 zoom-in-95 duration-150 select-none"
           >
             {/* Window Header */}
-            <div className="p-3 border-b border-border/60 bg-muted/40 flex items-center justify-between">
+            <div
+              style={{ backgroundColor: 'hsl(var(--muted))' }}
+              className="p-3 border-b border-border/60 bg-muted/60 flex items-center justify-between"
+            >
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
                   <Sparkles className="w-3.5 h-3.5" />
@@ -334,7 +338,10 @@ export function NotificationBell({ onOpenConnect, className }: NotificationBellP
             </div>
 
             {/* Scrollable Content Body */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-2.5 min-h-[180px]">
+            <div
+              style={{ backgroundColor: 'hsl(var(--card))' }}
+              className="flex-1 overflow-y-auto p-3 space-y-2.5 min-h-[180px] bg-card"
+            >
               {/* SECTION 1: FRIENDS */}
               {activeTab === 'friends' && (
                 <>
@@ -536,7 +543,10 @@ export function NotificationBell({ onOpenConnect, className }: NotificationBellP
 
             {/* Window Footer: Quick Duo-ID Share Tool */}
             {profile && (
-              <div className="p-2.5 bg-muted/40 border-t border-border/60 flex items-center justify-between gap-2 text-[11px]">
+              <div
+                style={{ backgroundColor: 'hsl(var(--muted))' }}
+                className="p-2.5 bg-muted/60 border-t border-border/60 flex items-center justify-between gap-2 text-[11px]"
+              >
                 <div className="truncate">
                   <span className="text-muted-foreground">Your Duo ID: </span>
                   <span className="font-mono font-semibold text-primary">{formatDuoId(profile)}</span>
