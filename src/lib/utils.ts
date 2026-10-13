@@ -42,18 +42,32 @@ export function formatMessageDate(dateString: string): string {
   }
 }
 
-export function formatLastSeen(dateString: string): string {
+export function formatLastSeen(dateString?: string | null): string {
+  if (!dateString) return 'Offline';
   try {
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'Offline';
     const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
+    const diffMs = Math.max(0, now.getTime() - date.getTime());
     const diffMins = Math.floor(diffMs / 60000);
 
     if (diffMins < 1) return 'Active just now';
     if (diffMins < 60) return `Active ${diffMins}m ago`;
     const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `Active ${diffHours}h ago`;
-    return `Last seen ${format(date, 'MMM d')}`;
+    if (diffHours < 24) {
+      if (isYesterday(date)) {
+        return `Active yesterday at ${format(date, 'h:mm a')}`;
+      }
+      return `Active ${diffHours}h ago`;
+    }
+    if (isYesterday(date)) {
+      return `Active yesterday at ${format(date, 'h:mm a')}`;
+    }
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) {
+      return `Active ${diffDays}d ago`;
+    }
+    return `Active on ${format(date, 'MMM d')}`;
   } catch {
     return 'Offline';
   }

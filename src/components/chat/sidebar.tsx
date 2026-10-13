@@ -40,6 +40,7 @@ export function Sidebar() {
     activeConversationId,
     setActiveConversationId,
     friendPresence,
+    isUserOnline,
     setIsMediaDrawerOpen,
     incomingRequests,
     respondToRequest,
@@ -237,7 +238,7 @@ export function Sidebar() {
             filteredConversations.map(conv => {
               const other = conv.otherUser;
               const isActive = conv.id === activeConversationId;
-              const isOtherOnline = other?.id === friendPresence.userId ? friendPresence.online : false;
+              const isOtherOnline = other?.id ? isUserOnline(other.id) : false;
 
               return (
                 <div

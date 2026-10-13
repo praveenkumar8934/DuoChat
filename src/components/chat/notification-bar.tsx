@@ -27,7 +27,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { toast } from '@/components/ui/toast';
 import { formatDuoId } from '@/lib/duo-id';
-import { cn } from '@/lib/utils';
+import { cn, formatLastSeen } from '@/lib/utils';
 import type { Profile } from '@/types/database';
 
 export interface NotificationBellProps {
@@ -44,6 +44,8 @@ export function NotificationBell({ onOpenConnect, className }: NotificationBellP
     setActiveConversationId,
     friendPresence,
     deleteFriend,
+    isUserOnline,
+    getUserLastSeen,
   } = useChat();
 
   const [isOpen, setIsOpen] = React.useState(false);
@@ -53,6 +55,16 @@ export function NotificationBell({ onOpenConnect, className }: NotificationBellP
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [copiedMyId, setCopiedMyId] = React.useState(false);
   const [coords, setCoords] = React.useState<{ top: number; left: number; width: number } | null>(null);
+  const [, setTick] = React.useState(0);
+
+  // Periodically refresh presence time-ago string every 30s
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const interval = setInterval(() => {
+      setTick(t => t + 1);
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [isOpen]);
 
   const buttonRef = React.useRef<HTMLButtonElement>(null);
   const popoverRef = React.useRef<HTMLDivElement>(null);
@@ -358,8 +370,8 @@ export function NotificationBell({ onOpenConnect, className }: NotificationBellP
                       </div>
 
                       {friends.map(({ conversationId, friend }) => {
-                        const isFriendOnline =
-                          friendPresence.userId === friend.id ? friendPresence.online : false;
+                        const isFriendOnline = isUserOnline(friend.id);
+                        const friendLastSeen = getUserLastSeen(friend.id) || friend.last_seen_at;
                         const duoIdText = formatDuoId(friend);
 
                         return (
@@ -386,11 +398,15 @@ export function NotificationBell({ onOpenConnect, className }: NotificationBellP
                                   <span
                                     className={cn(
                                       'w-1.5 h-1.5 rounded-full',
-                                      isFriendOnline ? 'bg-emerald-500' : 'bg-muted-foreground/50'
+                                      isFriendOnline ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/40'
                                     )}
                                   />
-                                  <span className="text-muted-foreground">
-                                    {isFriendOnline ? 'Online now' : 'Offline'}
+                                  <span
+                                    className={cn(
+                                      isFriendOnline ? 'text-emerald-500 font-medium' : 'text-muted-foreground'
+                                    )}
+                                  >
+                                    {isFriendOnline ? 'Online now' : formatLastSeen(friendLastSeen)}
                                   </span>
                                 </span>
                               </div>

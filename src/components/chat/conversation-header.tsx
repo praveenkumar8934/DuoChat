@@ -43,6 +43,15 @@ export function ConversationHeader() {
   const [selectedDate, setSelectedDate] = React.useState(anniversary || '');
   const [isDeleteModalOpen, setIsDeleteModalOpen] = React.useState(false);
   const [isDeletingFriend, setIsDeletingFriend] = React.useState(false);
+  const [, setTick] = React.useState(0);
+
+  // Periodically refresh the time-ago text every 30s so "Active just now" updates to "Active 1m ago", etc.
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setTick(t => t + 1);
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const friend = activeConversation?.otherUser;
 
@@ -119,7 +128,7 @@ export function ConversationHeader() {
                   </span>
                 ) : (
                   <span className="text-muted-foreground">
-                    {formatLastSeen(friend?.last_seen_at || friendPresence.lastSeen)}
+                    {formatLastSeen(friendPresence.lastSeen || friend?.last_seen_at)}
                   </span>
                 )}
 

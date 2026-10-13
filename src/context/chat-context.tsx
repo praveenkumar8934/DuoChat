@@ -55,6 +55,9 @@ export interface ChatContextType {
     friendId: string,
     conversationId?: string
   ) => Promise<{ success: boolean; error?: string; message?: string }>;
+  onlineUserIds: Set<string>;
+  isUserOnline: (userId: string) => boolean;
+  getUserLastSeen: (userId: string) => string | null;
 }
 
 export interface ConnectionRequestItem {
@@ -85,8 +88,26 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [friendPresence, setFriendPresence] = useState<UserPresence>({
     userId: '',
     online: false,
-    lastSeen: new Date().toISOString(),
+    lastSeen: '',
   });
+  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
+  const [userLastSeenMap, setUserLastSeenMap] = useState<Record<string, string>>({});
+
+  const isUserOnline = useCallback(
+    (userId: string) => {
+      if (!userId) return false;
+      return onlineUserIds.has(userId);
+    },
+    [onlineUserIds]
+  );
+
+  const getUserLastSeen = useCallback(
+    (userId: string) => {
+      if (!userId) return null;
+      return userLastSeenMap[userId] || null;
+    },
+    [userLastSeenMap]
+  );
 
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const channelRef = useRef<any>(null);
@@ -96,20 +117,27 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   // Sync friend presence from active conversation's partner
   useEffect(() => {
-    if (activeConversation?.otherUser) {
+    const otherUser = activeConversation?.otherUser;
+    if (otherUser) {
+      const isOnline = onlineUserIds.has(otherUser.id);
+      const lastSeenTime =
+        userLastSeenMap[otherUser.id] ||
+        otherUser.last_seen_at ||
+        '';
+
       setFriendPresence({
-        userId: activeConversation.otherUser.id,
-        online: true,
-        lastSeen: activeConversation.otherUser.last_seen_at || new Date().toISOString(),
+        userId: otherUser.id,
+        online: isOnline,
+        lastSeen: lastSeenTime,
       });
     } else {
       setFriendPresence({
         userId: '',
         online: false,
-        lastSeen: new Date().toISOString(),
+        lastSeen: '',
       });
     }
-  }, [activeConversation]);
+  }, [activeConversation?.otherUser, onlineUserIds, userLastSeenMap]);
 
   // Load conversations
   const refreshConversations = useCallback(async () => {
@@ -516,6 +544,162 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     };
   }, [isConfigured, profile, refreshConversations]);
 
+  // Global Realtime Presence across the entire app
+  useEffect(() => {
+    if (!isConfigured || !profile?.id) return;
+
+    const supabase = getSupabaseBrowserClient();
+    const globalChannel = supabase.channel('global-presence', {
+      config: {
+        presence: {
+          key: profile.id,
+        },
+      },
+    });
+
+    const syncPresenceState = () => {
+      const state = globalChannel.presenceState();
+      const activeIds = new Set<string>();
+      const seenMap: Record<string, string> = {};
+
+      Object.keys(state).forEach(key => {
+        activeIds.add(key);
+        const metas = state[key] as any[];
+        if (metas && metas.length > 0 && metas[0].online_at) {
+          seenMap[key] = metas[0].online_at;
+        }
+      });
+
+      setOnlineUserIds(activeIds);
+      setUserLastSeenMap(prev => ({ ...prev, ...seenMap }));
+    };
+
+    globalChannel
+      .on('presence', { event: 'sync' }, () => {
+        syncPresenceState();
+      })
+      .on('presence', { event: 'join' }, ({ key, newPresences }: { key: string; newPresences: any[] }) => {
+        setOnlineUserIds(prev => new Set(prev).add(key));
+        const onlineAt = newPresences?.[0]?.online_at || new Date().toISOString();
+        setUserLastSeenMap(prev => ({ ...prev, [key]: onlineAt }));
+      })
+      .on('presence', { event: 'leave' }, ({ key }: { key: string }) => {
+        const nowIso = new Date().toISOString();
+        setOnlineUserIds(prev => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+        setUserLastSeenMap(prev => ({ ...prev, [key]: nowIso }));
+      });
+
+    globalChannel.subscribe((status: string) => {
+      if (status === 'SUBSCRIBED') {
+        globalChannel.track({
+          user_id: profile.id,
+          online_at: new Date().toISOString(),
+        });
+      }
+    });
+
+    return () => {
+      globalChannel.unsubscribe();
+    };
+  }, [isConfigured, profile?.id]);
+
+  // Listen to profile last_seen_at updates in realtime
+  useEffect(() => {
+    if (!isConfigured || !profile?.id) return;
+
+    const supabase = getSupabaseBrowserClient();
+    const profilesChannel = supabase
+      .channel('realtime-profiles-status')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+        },
+        (payload: any) => {
+          const updated = payload.new;
+          if (updated?.id && updated?.last_seen_at) {
+            setUserLastSeenMap(prev => ({
+              ...prev,
+              [updated.id]: updated.last_seen_at,
+            }));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      profilesChannel.unsubscribe();
+    };
+  }, [isConfigured, profile?.id]);
+
+  // Heartbeat & Activity Flush: Send periodic heartbeat & beacon on unload / tab close
+  useEffect(() => {
+    if (!isConfigured || !profile?.id) return;
+
+    const sendHeartbeat = () => {
+      fetch('/api/presence/heartbeat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: profile.id }),
+      }).catch(() => {});
+    };
+
+    // Immediate initial heartbeat on mount
+    sendHeartbeat();
+
+    // Periodic heartbeat every 45 seconds while active
+    const interval = setInterval(sendHeartbeat, 45000);
+
+    const handleBeforeUnload = () => {
+      const payload = JSON.stringify({ userId: profile.id });
+      if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+        const blob = new Blob([payload], { type: 'application/json' });
+        navigator.sendBeacon('/api/presence/heartbeat', blob);
+      } else {
+        fetch('/api/presence/heartbeat', {
+          method: 'POST',
+          body: payload,
+          keepalive: true,
+          headers: { 'Content-Type': 'application/json' },
+        }).catch(() => {});
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        const payload = JSON.stringify({ userId: profile.id });
+        if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+          const blob = new Blob([payload], { type: 'application/json' });
+          navigator.sendBeacon('/api/presence/heartbeat', blob);
+        } else {
+          fetch('/api/presence/heartbeat', {
+            method: 'POST',
+            body: payload,
+            keepalive: true,
+            headers: { 'Content-Type': 'application/json' },
+          }).catch(() => {});
+        }
+      } else if (document.visibilityState === 'visible') {
+        sendHeartbeat();
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isConfigured, profile?.id]);
+
   // Handle active conversation change
   useEffect(() => {
     if (activeConversationId) {
@@ -548,29 +732,24 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         const state = channel.presenceState();
         const otherUserId = activeConversation?.otherUser?.id;
         if (otherUserId && state[otherUserId]) {
-          setFriendPresence({
-            userId: otherUserId,
-            online: true,
-            lastSeen: new Date().toISOString(),
-          });
+          setOnlineUserIds(prev => new Set(prev).add(otherUserId));
         }
       })
       .on('presence', { event: 'join' }, ({ key }: { key: string }) => {
         if (key === activeConversation?.otherUser?.id) {
-          setFriendPresence(prev => ({
-            ...prev,
-            online: true,
-            lastSeen: new Date().toISOString(),
-          }));
+          setOnlineUserIds(prev => new Set(prev).add(key));
+          setUserLastSeenMap(prev => ({ ...prev, [key]: new Date().toISOString() }));
         }
       })
       .on('presence', { event: 'leave' }, ({ key }: { key: string }) => {
         if (key === activeConversation?.otherUser?.id) {
-          setFriendPresence(prev => ({
-            ...prev,
-            online: false,
-            lastSeen: new Date().toISOString(),
-          }));
+          const nowIso = new Date().toISOString();
+          setOnlineUserIds(prev => {
+            const next = new Set(prev);
+            next.delete(key);
+            return next;
+          });
+          setUserLastSeenMap(prev => ({ ...prev, [key]: nowIso }));
         }
       });
 
@@ -1022,6 +1201,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         respondToRequest,
         connectWithPartner,
         deleteFriend,
+        onlineUserIds,
+        isUserOnline,
+        getUserLastSeen,
       }}
     >
       {children}

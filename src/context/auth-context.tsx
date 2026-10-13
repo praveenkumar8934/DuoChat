@@ -96,6 +96,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     if (isConfigured) {
+      if (profile?.id) {
+        try {
+          await fetch('/api/presence/heartbeat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: profile.id }),
+          });
+        } catch {
+          // Ignore error on sign out
+        }
+      }
       const supabase = getSupabaseBrowserClient();
       await supabase.auth.signOut();
     }
