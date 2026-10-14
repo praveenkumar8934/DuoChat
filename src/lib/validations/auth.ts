@@ -68,6 +68,7 @@ export const profileUpdateSchema = z.object({
     .max(30, 'Username cannot exceed 30 characters')
     .regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores'),
   bio: z.string().max(250, 'Bio cannot exceed 250 characters').optional().nullable(),
+  avatarPath: z.string().optional().nullable(),
 });
 
 export type ProfileUpdateFormData = z.infer<typeof profileUpdateSchema>;

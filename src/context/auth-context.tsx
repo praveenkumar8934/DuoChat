@@ -13,7 +13,7 @@ interface AuthContextType {
   isConfigured: boolean;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
-  updateProfile: (data: { displayName: string; username: string; bio?: string | null }) => Promise<{ error?: string }>;
+  updateProfile: (data: { displayName: string; username: string; bio?: string | null; avatarPath?: string | null }) => Promise<{ error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -120,39 +120,91 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const updateProfile = async (data: { displayName: string; username: string; bio?: string | null }) => {
+  const updateProfile = async (data: {
+    displayName: string;
+    username: string;
+    bio?: string | null;
+    avatarPath?: string | null;
+  }) => {
     if (!profile) return { error: 'No profile found' };
 
+    // Update optimistic local state immediately
+    setProfile(prev =>
+      prev
+        ? {
+            ...prev,
+            display_name: data.displayName,
+            username: data.username,
+            bio: data.bio ?? null,
+            avatar_path: data.avatarPath !== undefined ? data.avatarPath : prev.avatar_path,
+          }
+        : null
+    );
+
     if (!isConfigured) {
-      setProfile(prev => prev ? {
-        ...prev,
-        display_name: data.displayName,
-        username: data.username,
-        bio: data.bio ?? null,
-      } : null);
       return {};
     }
 
     try {
-      const supabase = getSupabaseBrowserClient();
-      const { error } = await supabase
-        .from('profiles')
-        .update({
+      // 1. First attempt via server endpoint (handles service-role bypassing RLS issues)
+      const res = await fetch('/api/profile/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': profile.id,
+        },
+        body: JSON.stringify({
+          userId: profile.id,
+          displayName: data.displayName,
+          username: data.username,
+          bio: data.bio,
+          avatarPath: data.avatarPath,
+        }),
+      });
+
+      const resData = await res.json();
+      if (!res.ok) {
+        await refreshProfile();
+        return { error: resData.error || 'Failed to update profile' };
+      }
+
+      if (resData.profile) {
+        setProfile(resData.profile as Profile);
+      } else {
+        await refreshProfile();
+      }
+
+      return {};
+    } catch (err: unknown) {
+      // 2. Direct client fallback with browser Supabase client
+      try {
+        const supabase = getSupabaseBrowserClient();
+        const updatePayload: Record<string, any> = {
           display_name: data.displayName,
           username: data.username,
           bio: data.bio ?? null,
           updated_at: new Date().toISOString(),
-        })
-        .eq('id', profile.id);
+        };
 
-      if (error) {
-        return { error: error.message };
+        if (data.avatarPath !== undefined) {
+          updatePayload.avatar_path = data.avatarPath;
+        }
+
+        const { error } = await supabase
+          .from('profiles')
+          .update(updatePayload)
+          .eq('id', profile.id);
+
+        if (error) {
+          await refreshProfile();
+          return { error: error.message };
+        }
+
+        await refreshProfile();
+        return {};
+      } catch (clientErr: unknown) {
+        return { error: (clientErr as Error)?.message || (err as Error)?.message || 'Failed to update profile' };
       }
-
-      await refreshProfile();
-      return {};
-    } catch (err: unknown) {
-      return { error: (err as Error)?.message || 'Failed to update profile' };
     }
   };
 

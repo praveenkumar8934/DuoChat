@@ -26,7 +26,6 @@ import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { toast } from '@/components/ui/toast';
-import { formatDuoId } from '@/lib/duo-id';
 import { cn, formatLastSeen } from '@/lib/utils';
 import type { Profile } from '@/types/database';
 
@@ -210,12 +209,14 @@ export function NotificationBell({ onOpenConnect, className }: NotificationBellP
     }
   };
 
-  const handleCopyMyDuoId = () => {
-    if (!profile) return;
-    const text = formatDuoId(profile);
-    navigator.clipboard.writeText(text);
+  const handleCopyMyUsername = () => {
+    if (!profile?.username) {
+      toast.error('No username set');
+      return;
+    }
+    navigator.clipboard.writeText(`@${profile.username}`);
     setCopiedMyId(true);
-    toast.success('Duo ID copied to clipboard!');
+    toast.success('Username copied to clipboard!');
     setTimeout(() => setCopiedMyId(false), 2000);
   };
 
@@ -379,7 +380,6 @@ export function NotificationBell({ onOpenConnect, className }: NotificationBellP
                       {friends.map(({ conversationId, friend }) => {
                         const isFriendOnline = isUserOnline(friend.id);
                         const friendLastSeen = getUserLastSeen(friend.id) || friend.last_seen_at;
-                        const duoIdText = formatDuoId(friend);
 
                         return (
                           <div
@@ -398,8 +398,7 @@ export function NotificationBell({ onOpenConnect, className }: NotificationBellP
                                   {friend.display_name}
                                 </p>
                                 <p className="text-[10px] text-muted-foreground font-mono truncate">
-                                  {duoIdText}
-                                  {friend.username && ` • @${friend.username}`}
+                                  @{friend.username || 'user'}
                                 </p>
                                 <span className="inline-flex items-center gap-1 text-[10px] mt-0.5">
                                   <span
@@ -460,7 +459,7 @@ export function NotificationBell({ onOpenConnect, className }: NotificationBellP
                       <div className="space-y-1">
                         <p className="text-xs font-semibold text-foreground">No pending requests</p>
                         <p className="text-[11px] text-muted-foreground max-w-[240px] mx-auto leading-relaxed">
-                          When someone sends a connection request using your Duo ID, it will appear right here in real time.
+                          When someone sends a connection request using your username, it will appear right here in real time.
                         </p>
                       </div>
                     </div>
@@ -472,7 +471,6 @@ export function NotificationBell({ onOpenConnect, className }: NotificationBellP
 
                       {incomingRequests.map(req => {
                         const isBusy = processingId === req.id;
-                        const duoIdText = formatDuoId(req.sender as any);
 
                         return (
                           <div
@@ -496,8 +494,7 @@ export function NotificationBell({ onOpenConnect, className }: NotificationBellP
                                   </span>
                                 </div>
                                 <p className="text-[11px] text-muted-foreground font-mono truncate">
-                                  {duoIdText}
-                                  {req.sender.username && ` • @${req.sender.username}`}
+                                  @{req.sender.username || 'user'}
                                 </p>
                                 <p className="text-[11px] text-primary font-medium italic mt-0.5">
                                   wants to connect with you
@@ -541,21 +538,21 @@ export function NotificationBell({ onOpenConnect, className }: NotificationBellP
               )}
             </div>
 
-            {/* Window Footer: Quick Duo-ID Share Tool */}
+            {/* Window Footer: Quick Username Share Tool */}
             {profile && (
               <div
                 style={{ backgroundColor: 'hsl(var(--muted))' }}
                 className="p-2.5 bg-muted/60 border-t border-border/60 flex items-center justify-between gap-2 text-[11px]"
               >
                 <div className="truncate">
-                  <span className="text-muted-foreground">Your Duo ID: </span>
-                  <span className="font-mono font-semibold text-primary">{formatDuoId(profile)}</span>
+                  <span className="text-muted-foreground">Your Username: </span>
+                  <span className="font-mono font-semibold text-primary">@{profile.username || 'user'}</span>
                 </div>
                 <button
                   type="button"
-                  onClick={handleCopyMyDuoId}
+                  onClick={handleCopyMyUsername}
                   className="px-2 py-1 rounded-lg bg-background hover:bg-primary/10 border border-border/60 text-muted-foreground hover:text-primary transition-all flex items-center gap-1 cursor-pointer shrink-0 font-medium"
-                  title="Copy your Duo ID to share with friends"
+                  title="Copy your username to share with friends"
                 >
                   {copiedMyId ? (
                     <>
@@ -565,7 +562,7 @@ export function NotificationBell({ onOpenConnect, className }: NotificationBellP
                   ) : (
                     <>
                       <Copy className="w-3 h-3" />
-                      <span className="text-[10px]">Copy ID</span>
+                      <span className="text-[10px]">Copy Username</span>
                     </>
                   )}
                 </button>
@@ -592,7 +589,7 @@ export function NotificationBell({ onOpenConnect, className }: NotificationBellP
                 {confirmDelete?.friend.display_name}
               </p>
               <p className="text-xs text-muted-foreground font-mono truncate">
-                {confirmDelete?.friend ? formatDuoId(confirmDelete.friend) : ''}
+                {confirmDelete?.friend?.username ? `@${confirmDelete.friend.username}` : ''}
               </p>
             </div>
           </div>
@@ -643,7 +640,6 @@ export function TopNotificationBar() {
 
   const current = incomingRequests[0];
   const isBusy = processingId === current.id;
-  const duoIdText = formatDuoId(current.sender as any);
 
   const handleAction = async (requestId: string, action: 'accept' | 'decline', senderName: string) => {
     setProcessingId(requestId);
@@ -677,7 +673,7 @@ export function TopNotificationBar() {
         <div className="truncate">
           <span className="font-semibold text-foreground">{current.sender.display_name}</span>
           <span className="text-muted-foreground ml-1.5 font-mono text-[11px]">
-            ({duoIdText})
+            (@{current.sender.username || 'user'})
           </span>
           <span className="text-muted-foreground ml-1 hidden sm:inline">
             sent you a partner connection request!

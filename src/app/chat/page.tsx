@@ -9,13 +9,12 @@ import { ConversationHeader } from '@/components/chat/conversation-header';
 import { MessageList } from '@/components/chat/message-list';
 import { MessageComposer } from '@/components/chat/message-composer';
 import { MediaGalleryDrawer } from '@/components/chat/media-gallery-drawer';
-import { UserPlus, Sparkles, Copy, Check, ArrowRight, Loader2, ShieldCheck } from 'lucide-react';
+import { UserPlus, Sparkles, Copy, Check, ArrowRight, Loader2, ShieldCheck, AtSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { InviteModal } from '@/components/chat/invite-modal';
 import { TopNotificationBar } from '@/components/chat/notification-bar';
 import { BrandLogo } from '@/components/ui/brand-logo';
-import { formatDuoId } from '@/lib/duo-id';
 import { toast } from '@/components/ui/toast';
 
 export default function ChatPage() {
@@ -54,16 +53,21 @@ export default function ChatPage() {
     return null;
   }
 
-  const duoId = formatDuoId(profile || user?.id);
+  const username = profile?.username || user?.user_metadata?.username || '';
 
-  const handleCopyId = async () => {
+  const handleCopyUsername = async () => {
     try {
-      await navigator.clipboard.writeText(duoId);
+      const text = username ? `@${username}` : '';
+      if (!text) {
+        toast.error('No username set');
+        return;
+      }
+      await navigator.clipboard.writeText(text);
       setCopied(true);
-      toast.success('Duo ID copied to clipboard!');
+      toast.success('Username copied to clipboard!');
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      toast.error('Failed to copy ID');
+      toast.error('Failed to copy username');
     }
   };
 
@@ -83,7 +87,7 @@ export default function ChatPage() {
           setPartnerInput('');
         }
       } else {
-        toast.error(res.error || 'Could not find user with that Duo ID or username.');
+        toast.error(res.error || 'Could not find user with that username.');
       }
     } catch (err: any) {
       toast.error(err.message || 'Failed to connect');
@@ -127,38 +131,38 @@ export default function ChatPage() {
                   Just us, in our own little world.
                 </h3>
                 <p className="text-xs text-muted-foreground leading-relaxed max-w-sm mx-auto">
-                  Connect 1-on-1 with your partner using your unique Duo ID or enter theirs to start chatting.
+                  Connect 1-on-1 with your partner using your username or enter theirs to start chatting.
                 </p>
               </div>
 
-              {/* Your Duo ID Card */}
+              {/* Your Username Card */}
               <div className="bg-card/70 backdrop-blur-md border border-primary/20 rounded-2xl p-4 shadow-sm text-left space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                    <ShieldCheck className="w-3.5 h-3.5 text-primary" />
-                    Your Unique Duo ID
+                    <AtSign className="w-3.5 h-3.5 text-primary" />
+                    Your Username
                   </span>
                   <button
-                    onClick={handleCopyId}
+                    onClick={handleCopyUsername}
                     className="text-[11px] text-primary hover:underline flex items-center gap-1 cursor-pointer font-medium"
                   >
                     {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                    {copied ? 'Copied' : 'Copy ID'}
+                    {copied ? 'Copied' : 'Copy Username'}
                   </button>
                 </div>
                 <div
-                  onClick={handleCopyId}
+                  onClick={handleCopyUsername}
                   className="bg-background/80 hover:bg-background border border-border/60 hover:border-primary/40 rounded-xl p-2.5 flex items-center justify-between cursor-pointer transition-colors group"
                 >
                   <code className="text-sm font-mono font-semibold text-primary tracking-wide">
-                    {duoId}
+                    @{username || 'user'}
                   </code>
                   <span className="text-[11px] text-muted-foreground group-hover:text-foreground">
                     Click to copy
                   </span>
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-normal">
-                  Give this ID to your partner so they can connect with you directly.
+                  Give this username to your partner so they can connect with you directly.
                 </p>
               </div>
 
@@ -166,7 +170,7 @@ export default function ChatPage() {
               <form onSubmit={handleQuickConnect} className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Input
-                    placeholder="Enter partner's #DUO-ID or username"
+                    placeholder="Enter partner's username (e.g. alex_rivera)"
                     value={partnerInput}
                     onChange={(e) => setPartnerInput(e.target.value)}
                     className="rounded-xl bg-card/60 backdrop-blur border-border text-xs h-10 font-mono placeholder:font-sans"

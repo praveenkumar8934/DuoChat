@@ -33,7 +33,6 @@ import { BrandLogo } from '@/components/ui/brand-logo';
 import { InviteModal } from './invite-modal';
 import { NotificationBell } from './notification-bar';
 import { formatChatListItemTime, formatLastSeen, cn } from '@/lib/utils';
-import { formatDuoId } from '@/lib/duo-id';
 import { toast } from '@/components/ui/toast';
 
 export function Sidebar() {
@@ -57,38 +56,20 @@ export function Sidebar() {
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const menuRef = React.useRef<HTMLDivElement>(null);
 
-  const duoId = formatDuoId(profile);
-
-  // Close 3-dots menu on click outside or escape key
-  React.useEffect(() => {
-    if (!isMenuOpen) return;
-    function handleClickOutside(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setIsMenuOpen(false);
-      }
-    }
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        setIsMenuOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isMenuOpen]);
-
-  const handleCopyDuoId = (e?: React.MouseEvent) => {
+  const handleCopyUsername = (e?: React.MouseEvent) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
-    navigator.clipboard.writeText(duoId);
-    setCopiedId(true);
-    toast.success('Duo ID copied to clipboard!');
-    setTimeout(() => setCopiedId(false), 2000);
+    const uname = profile?.username ? `@${profile.username}` : '';
+    if (uname) {
+      navigator.clipboard.writeText(uname);
+      setCopiedId(true);
+      toast.success('Username copied to clipboard!');
+      setTimeout(() => setCopiedId(false), 2000);
+    } else {
+      toast.error('No username set yet');
+    }
   };
 
   const filteredConversations = React.useMemo(() => {
@@ -97,12 +78,10 @@ export function Sidebar() {
     return conversations.filter(c => {
       const name = c.otherUser?.display_name?.toLowerCase() || '';
       const user = c.otherUser?.username?.toLowerCase() || '';
-      const duo = formatDuoId(c.otherUser).toLowerCase();
       const lastMsg = c.lastMessage?.body?.toLowerCase() || '';
       return (
         name.includes(query) ||
         user.includes(query) ||
-        duo.includes(query) ||
         lastMsg.includes(query)
       );
     });
@@ -191,7 +170,7 @@ export function Sidebar() {
                   >
                     <p className="text-[11px] font-medium text-muted-foreground">Signed in as</p>
                     <p className="font-semibold text-foreground truncate">{profile?.display_name || 'My Profile'}</p>
-                    <p className="text-[10px] text-primary font-mono">{duoId}</p>
+                    <p className="text-[10px] text-primary font-mono">@{profile?.username || 'user'}</p>
                   </div>
 
                   <button
@@ -221,19 +200,19 @@ export function Sidebar() {
                   <button
                     type="button"
                     onClick={(e) => {
-                      handleCopyDuoId(e);
+                      handleCopyUsername(e);
                       setIsMenuOpen(false);
                     }}
                     className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-muted/80 text-foreground transition-colors cursor-pointer"
                   >
                     <div className="flex items-center gap-2.5">
                       <Copy className="w-4 h-4 text-muted-foreground shrink-0" />
-                      <span>Copy My Duo ID</span>
+                      <span>Copy My Username</span>
                     </div>
                     {copiedId ? (
                       <span className="text-[10px] text-emerald-500 font-medium">Copied!</span>
                     ) : (
-                      <span className="text-[10px] font-mono text-muted-foreground">{duoId.slice(0, 8)}...</span>
+                      <span className="text-[10px] font-mono text-muted-foreground">@{profile?.username || 'user'}</span>
                     )}
                   </button>
 
@@ -322,7 +301,6 @@ export function Sidebar() {
               </div>
 
               {incomingRequests.map(req => {
-                const duoIdText = formatDuoId(req.sender as any);
                 return (
                   <div
                     key={req.id}
@@ -339,7 +317,7 @@ export function Sidebar() {
                           {req.sender.display_name}
                         </p>
                         <p className="text-[10px] text-muted-foreground font-mono truncate">
-                          {duoIdText}
+                          @{req.sender.username || 'user'}
                         </p>
                       </div>
                     </div>
@@ -395,7 +373,7 @@ export function Sidebar() {
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-foreground">No friends yet</p>
                   <p className="text-xs text-muted-foreground max-w-[220px] mx-auto leading-relaxed">
-                    Share your Duo ID or connect with your partner to start chatting.
+                    Share your username or connect with your partner to start chatting.
                   </p>
                 </div>
                 <Button
@@ -540,17 +518,17 @@ export function Sidebar() {
                 {profile?.display_name || 'My Profile'}
               </p>
               <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono truncate">
-                <span className="text-primary font-medium">{duoId}</span>
+                <span className="text-primary font-medium">@{profile?.username || 'user'}</span>
               </div>
             </div>
           </Link>
 
           <button
             type="button"
-            onClick={handleCopyDuoId}
+            onClick={handleCopyUsername}
             className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0 cursor-pointer"
-            title="Copy your Duo ID"
-            aria-label="Copy Duo ID"
+            title="Copy your username"
+            aria-label="Copy Username"
           >
             {copiedId ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
           </button>

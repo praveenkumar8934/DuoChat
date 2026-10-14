@@ -13,11 +13,11 @@ import {
   Search,
   KeyRound,
   AlertCircle,
+  AtSign,
 } from 'lucide-react';
 import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { generateSecureToken, hashToken } from '@/lib/utils';
-import { formatDuoId } from '@/lib/duo-id';
 import { useAuth } from '@/context/auth-context';
 import { useChat } from '@/context/chat-context';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
@@ -26,16 +26,18 @@ import { Invitation } from '@/types/database';
 interface InviteModalProps {
   isOpen: boolean;
   onClose: () => void;
-  defaultTab?: 'duoid' | 'link';
+  defaultTab?: 'username' | 'link' | 'duoid';
 }
 
-export function InviteModal({ isOpen, onClose, defaultTab = 'duoid' }: InviteModalProps) {
+export function InviteModal({ isOpen, onClose, defaultTab = 'username' }: InviteModalProps) {
   const { profile, isConfigured } = useAuth();
   const { connectWithPartner } = useChat();
 
-  const [activeTab, setActiveTab] = React.useState<'duoid' | 'link'>(defaultTab);
+  const [activeTab, setActiveTab] = React.useState<'username' | 'link'>(
+    defaultTab === 'link' ? 'link' : 'username'
+  );
 
-  // Duo ID connect state
+  // Username connect state
   const [targetIdentifier, setTargetIdentifier] = React.useState('');
   const [isConnecting, setIsConnecting] = React.useState(false);
   const [connectError, setConnectError] = React.useState<string | null>(null);
@@ -49,7 +51,7 @@ export function InviteModal({ isOpen, onClose, defaultTab = 'duoid' }: InviteMod
   const [isGeneratingLink, setIsGeneratingLink] = React.useState(false);
   const [myInvites, setMyInvites] = React.useState<Invitation[]>([]);
 
-  const myDuoId = formatDuoId(profile);
+  const myUsername = profile?.username || '';
 
   const loadInvites = React.useCallback(async () => {
     if (!isConfigured || !profile) return;
@@ -72,7 +74,7 @@ export function InviteModal({ isOpen, onClose, defaultTab = 'duoid' }: InviteMod
 
   React.useEffect(() => {
     if (isOpen) {
-      setActiveTab(defaultTab);
+      setActiveTab(defaultTab === 'link' ? 'link' : 'username');
       setConnectError(null);
       setConnectSuccess(null);
       setTargetIdentifier('');
@@ -84,13 +86,15 @@ export function InviteModal({ isOpen, onClose, defaultTab = 'duoid' }: InviteMod
     }
   }, [isOpen, defaultTab, loadInvites]);
 
-  const copyMyDuoId = () => {
-    navigator.clipboard.writeText(myDuoId);
-    setCopiedMyId(true);
-    setTimeout(() => setCopiedMyId(false), 2500);
+  const copyMyUsername = () => {
+    if (myUsername) {
+      navigator.clipboard.writeText(`@${myUsername}`);
+      setCopiedMyId(true);
+      setTimeout(() => setCopiedMyId(false), 2500);
+    }
   };
 
-  const handleConnectByDuoId = async (e: React.FormEvent) => {
+  const handleConnectByUsername = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!targetIdentifier.trim()) return;
 
@@ -171,22 +175,22 @@ export function InviteModal({ isOpen, onClose, defaultTab = 'duoid' }: InviteMod
       onClose={onClose}
       size="md"
       title="Connect with Your Partner"
-      description="Connect directly with your favorite person using their unique Duo ID or a private invite link."
+      description="Connect directly with your favorite person using their unique username or a private invite link."
     >
       <div className="space-y-4 pt-1">
         {/* Navigation Tabs */}
         <div className="flex rounded-2xl bg-muted/80 p-1 border border-border/60">
           <button
             type="button"
-            onClick={() => setActiveTab('duoid')}
+            onClick={() => setActiveTab('username')}
             className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-              activeTab === 'duoid'
+              activeTab === 'username'
                 ? 'bg-card text-foreground shadow-xs border border-border/50'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            <KeyRound className="w-3.5 h-3.5 text-primary" />
-            <span>Connect with Duo ID</span>
+            <AtSign className="w-3.5 h-3.5 text-primary" />
+            <span>Connect with Username</span>
           </button>
           <button
             type="button"
@@ -202,15 +206,15 @@ export function InviteModal({ isOpen, onClose, defaultTab = 'duoid' }: InviteMod
           </button>
         </div>
 
-        {/* TAB 1: CONNECT VIA DUO ID */}
-        {activeTab === 'duoid' && (
+        {/* TAB 1: CONNECT VIA USERNAME */}
+        {activeTab === 'username' && (
           <div className="space-y-4">
-            {/* My Unique Duo ID Card */}
+            {/* My Unique Username Card */}
             <div className="p-3.5 rounded-2xl bg-gradient-to-tr from-rose-500/10 via-pink-500/5 to-transparent border border-rose-500/20 space-y-1.5">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-primary" />
-                  Your Unique Duo ID
+                  <AtSign className="w-3.5 h-3.5 text-primary" />
+                  Your Username
                 </span>
                 <span className="text-[10px] text-muted-foreground">Share this with your partner</span>
               </div>
@@ -218,19 +222,14 @@ export function InviteModal({ isOpen, onClose, defaultTab = 'duoid' }: InviteMod
               <div className="flex items-center justify-between bg-card/80 backdrop-blur-xs p-2 rounded-xl border border-border">
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs font-bold tracking-wider text-foreground px-2 py-0.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
-                    {myDuoId}
+                    @{myUsername || 'user'}
                   </span>
-                  {profile?.username && (
-                    <span className="text-[11px] text-muted-foreground font-mono">
-                      @{profile.username}
-                    </span>
-                  )}
                 </div>
 
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={copyMyDuoId}
+                  onClick={copyMyUsername}
                   className="h-7 text-xs gap-1 rounded-lg hover:bg-muted"
                 >
                   {copiedMyId ? (
@@ -241,30 +240,30 @@ export function InviteModal({ isOpen, onClose, defaultTab = 'duoid' }: InviteMod
                   ) : (
                     <>
                       <Copy className="w-3.5 h-3.5" />
-                      <span>Copy ID</span>
+                      <span>Copy Username</span>
                     </>
                   )}
                 </Button>
               </div>
             </div>
 
-            {/* Form to enter partner's ID */}
-            <form onSubmit={handleConnectByDuoId} className="space-y-3">
+            {/* Form to enter partner's username */}
+            <form onSubmit={handleConnectByUsername} className="space-y-3">
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                   <Search className="w-3.5 h-3.5 text-primary" />
-                  <span>Partner&apos;s Duo ID or Username</span>
+                  <span>Partner&apos;s Username</span>
                 </label>
                 <input
                   type="text"
                   value={targetIdentifier}
                   onChange={e => setTargetIdentifier(e.target.value)}
-                  placeholder="e.g. #DUO-8A3F1C2B or @username"
+                  placeholder="e.g. alex_rivera or @alex_rivera"
                   className="w-full px-3.5 py-2.5 rounded-xl text-xs bg-background border border-input focus:outline-none focus:ring-2 focus:ring-primary/20 font-mono placeholder:font-sans placeholder:text-muted-foreground transition-all"
                   autoFocus
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  Ask your partner for their unique Duo ID shown on their profile.
+                  Ask your partner for their username shown on their profile.
                 </p>
               </div>
 

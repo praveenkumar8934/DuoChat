@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { loginSchema, signupSchema } from '@/lib/validations/auth';
+import { loginSchema, signupSchema, profileUpdateSchema } from '@/lib/validations/auth';
 import { validateFileAttachment } from '@/lib/validations/message';
 
 describe('Auth Validation Schemas', () => {
@@ -49,6 +49,33 @@ describe('Auth Validation Schemas', () => {
       confirmPassword: 'Password123',
     });
     expect(valid.success).toBe(true);
+  });
+
+  it('should validate profile updates with avatarPath', () => {
+    // Valid profile with custom avatar
+    const validWithAvatar = profileUpdateSchema.safeParse({
+      displayName: 'Alex Rivera',
+      username: 'alex_rivera',
+      bio: 'Together forever <3',
+      avatarPath: 'data:image/webp;base64,UklGRkAAAABXRUJQVlA4IDQAAADwAQCdASo...',
+    });
+    expect(validWithAvatar.success).toBe(true);
+
+    // Valid profile with null avatar (removal)
+    const validNullAvatar = profileUpdateSchema.safeParse({
+      displayName: 'Alex Rivera',
+      username: 'alex_rivera',
+      bio: null,
+      avatarPath: null,
+    });
+    expect(validNullAvatar.success).toBe(true);
+
+    // Invalid username with spaces
+    const invalidUsername = profileUpdateSchema.safeParse({
+      displayName: 'Alex Rivera',
+      username: 'alex rivera',
+    });
+    expect(invalidUsername.success).toBe(false);
   });
 });
 
