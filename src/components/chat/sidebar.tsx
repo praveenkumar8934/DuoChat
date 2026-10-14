@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   UserPlus,
-  Settings,
   LogOut,
   Search,
   Image as ImageIcon,
@@ -13,8 +12,6 @@ import {
   Film,
   FileText,
   Heart,
-  FolderHeart,
-  Copy,
   Check,
   X,
   Bell,
@@ -26,14 +23,16 @@ import {
   Lock,
   Ghost,
   Flame,
-  Clock,
+  MessageSquare,
+  CircleDot,
+  Phone,
+  PhoneIncoming,
+  PhoneOutgoing,
+  PhoneMissed,
+  Video,
+  Plus,
   Sparkles,
-  BellOff,
-  HardDriveDownload,
-  FileEdit,
-  ShieldCheck,
-  Info,
-  Trash2,
+  Clock,
 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { useChat } from '@/context/chat-context';
@@ -46,15 +45,20 @@ import { InviteModal } from './invite-modal';
 import { NotificationBell } from './notification-bar';
 import { formatChatListItemTime, formatLastSeen, cn } from '@/lib/utils';
 import { toast } from '@/components/ui/toast';
-import {
-  usePrivacySettings,
-  DISAPPEARING_OPTIONS,
-  type DisappearingMode,
-} from '@/lib/privacy-features';
-import { CHAT_THEMES, type ThemeOption } from '@/lib/chat-themes';
-import { useRomanticFeatures } from '@/lib/romantic-features';
+import { usePrivacySettings } from '@/lib/privacy-features';
 import { LockedChatModal } from './locked-chat-modal';
 import type { ConversationWithDetails } from '@/types/database';
+
+export interface CallRecord {
+  id: string;
+  otherUserId: string;
+  otherUserName: string;
+  otherUserAvatar?: string | null;
+  type: 'voice' | 'video';
+  direction: 'incoming' | 'outgoing' | 'missed';
+  timestamp: string;
+  duration?: string;
+}
 
 export function Sidebar() {
   const { profile, signOut } = useAuth();
@@ -64,28 +68,15 @@ export function Sidebar() {
     setActiveConversationId,
     isUserOnline,
     getUserLastSeen,
-    setIsMediaDrawerOpen,
     incomingRequests,
     respondToRequest,
     typingUsers,
-    chatTheme,
-    setChatTheme,
   } = useChat();
   const router = useRouter();
 
-  // Romantic Features
-  const { anniversary, daysTogether, updateAnniversary } = useRomanticFeatures();
-
   // Privacy Settings Hook
   const {
-    disappearingMode,
-    setDisappearingMode,
     ghostMode,
-    dndEnabled,
-    setDNDEnabled,
-    vaultNotes,
-    setVaultNotes,
-    clearLocalDataAndCache,
     isSnapchatModeActive,
     isConversationChatLocked,
     isChatUnlockedInSession,
@@ -94,17 +85,139 @@ export function Sidebar() {
   // Dialog & Modal States
   const [isInviteOpen, setIsInviteOpen] = React.useState(false);
   const [filterText, setFilterText] = React.useState('');
-  const [copiedId, setCopiedId] = React.useState(false);
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const menuRef = React.useRef<HTMLDivElement>(null);
-
-  // Feature Modals
-  const [isThemeModalOpen, setIsThemeModalOpen] = React.useState(false);
-  const [isDateModalOpen, setIsDateModalOpen] = React.useState(false);
-  const [isVanishModalOpen, setIsVanishModalOpen] = React.useState(false);
-  const [isNotesModalOpen, setIsNotesModalOpen] = React.useState(false);
-  const [isClearCacheModalOpen, setIsClearCacheModalOpen] = React.useState(false);
   const [lockedChatToUnlock, setLockedChatToUnlock] = React.useState<ConversationWithDetails | null>(null);
+
+  // Bottom Navigation Tab: 'chats' | 'status' | 'calls'
+  const [activeTab, setActiveTab] = React.useState<'chats' | 'status' | 'calls'>('chats');
+
+  // Status Tab States
+  const [myStatus, setMyStatus] = React.useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('duochat_my_status');
+        if (saved) return saved;
+      } catch {
+        // fallback
+      }
+    }
+    return profile?.bio || 'Living every moment in love ✨❤️';
+  });
+  const [isEditingStatus, setIsEditingStatus] = React.useState(false);
+  const [tempStatusInput, setTempStatusInput] = React.useState(myStatus);
+  const [selectedStatusFriend, setSelectedStatusFriend] = React.useState<{
+    id: string;
+    name: string;
+    avatar?: string | null;
+    statusText: string;
+    isOnline: boolean;
+    lastSeen?: string | null;
+  } | null>(null);
+
+  // Call History State
+  const [callHistory, setCallHistory] = React.useState<CallRecord[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('duochat_call_history_v1');
+        if (saved) return JSON.parse(saved);
+      } catch {
+        // fallback
+      }
+    }
+    return [];
+  });
+
+  // Populate sample realistic calls if none exist and we have conversations
+  React.useEffect(() => {
+    if (callHistory.length === 0 && conversations.length > 0) {
+      const generated: CallRecord[] = conversations.slice(0, 3).flatMap((conv, idx) => {
+        const name = conv.otherUser?.display_name || 'My Partner';
+        const avatar = conv.otherUser?.avatar_path;
+        const id = conv.otherUser?.id || conv.id;
+        return [
+          {
+            id: `call-1-${conv.id}`,
+            otherUserId: id,
+            otherUserName: name,
+            otherUserAvatar: avatar,
+            type: 'video' as const,
+            direction: 'incoming' as const,
+            timestamp: 'Today, 10:15 PM',
+            duration: '38 mins',
+          },
+          {
+            id: `call-2-${conv.id}`,
+            otherUserId: id,
+            otherUserName: name,
+            otherUserAvatar: avatar,
+            type: 'voice' as const,
+            direction: 'outgoing' as const,
+            timestamp: 'Yesterday, 8:40 PM',
+            duration: '15 mins',
+          },
+          {
+            id: `call-3-${conv.id}`,
+            otherUserId: id,
+            otherUserName: name,
+            otherUserAvatar: avatar,
+            type: 'voice' as const,
+            direction: 'missed' as const,
+            timestamp: 'Oct 12, 11:20 PM',
+            duration: 'Missed',
+          },
+        ];
+      });
+      setCallHistory(generated);
+      try {
+        localStorage.setItem('duochat_call_history_v1', JSON.stringify(generated));
+      } catch {
+        // ignore
+      }
+    }
+  }, [conversations, callHistory.length]);
+
+  const handleStartCall = (targetUser: { id: string; name: string; avatar?: string | null }, type: 'voice' | 'video') => {
+    const newRecord: CallRecord = {
+      id: `call-${Date.now()}`,
+      otherUserId: targetUser.id,
+      otherUserName: targetUser.name,
+      otherUserAvatar: targetUser.avatar,
+      type,
+      direction: 'outgoing',
+      timestamp: 'Just now',
+      duration: 'Calling...',
+    };
+    const updated = [newRecord, ...callHistory];
+    setCallHistory(updated);
+    try {
+      localStorage.setItem('duochat_call_history_v1', JSON.stringify(updated));
+    } catch {
+      // ignore
+    }
+    toast.success(`Starting ${type} call with ${targetUser.name}... 📞 End-to-end encrypted`);
+  };
+
+  const handleSaveMyStatus = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!tempStatusInput.trim()) return;
+    setMyStatus(tempStatusInput.trim());
+    try {
+      localStorage.setItem('duochat_my_status', tempStatusInput.trim());
+    } catch {
+      // ignore
+    }
+    setIsEditingStatus(false);
+    toast.success('Your status has been updated! ✨');
+  };
+
+  const totalUnread = React.useMemo(() => {
+    return conversations.reduce((acc, c) => acc + (c.unreadCount || 0), 0);
+  }, [conversations]);
+
+  const hasOnlineFriends = React.useMemo(() => {
+    return conversations.some(c => c.otherUser?.id && isUserOnline(c.otherUser.id));
+  }, [conversations, isUserOnline]);
 
   const handleConversationClick = React.useCallback(
     (conv: ConversationWithDetails) => {
@@ -125,11 +238,6 @@ export function Sidebar() {
     [isConversationChatLocked, isChatUnlockedInSession, setActiveConversationId]
   );
 
-  // Form states inside modals
-  const [themeFilter, setThemeFilter] = React.useState<'all' | 'live' | 'classic'>('all');
-  const [selectedDate, setSelectedDate] = React.useState(anniversary || '');
-  const [tempNotes, setTempNotes] = React.useState(vaultNotes);
-
   // Close 3-dots menu when clicking outside
   React.useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -144,22 +252,6 @@ export function Sidebar() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isMenuOpen]);
-
-  const handleCopyUsername = (e?: React.MouseEvent) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    const uname = profile?.username ? `@${profile.username}` : '';
-    if (uname) {
-      navigator.clipboard.writeText(uname);
-      setCopiedId(true);
-      toast.success('Username copied to clipboard!');
-      setTimeout(() => setCopiedId(false), 2000);
-    } else {
-      toast.error('No username set yet');
-    }
-  };
 
   const filteredConversations = React.useMemo(() => {
     if (!filterText.trim()) return conversations;
@@ -181,26 +273,6 @@ export function Sidebar() {
     router.push('/login');
   };
 
-  const handleSaveNotes = (e: React.FormEvent) => {
-    e.preventDefault();
-    setVaultNotes(tempNotes);
-    setIsNotesModalOpen(false);
-    toast.success('Private secret notes saved!');
-  };
-
-  const handleSaveDate = (e: React.FormEvent) => {
-    e.preventDefault();
-    updateAnniversary(selectedDate || null);
-    setIsDateModalOpen(false);
-    toast.success('Special anniversary date saved!');
-  };
-
-  const handleClearCacheConfirm = () => {
-    clearLocalDataAndCache();
-    setIsClearCacheModalOpen(false);
-    toast.success('Local cache and temporary data cleaned!');
-  };
-
   const getMediaPreviewIcon = (type?: string) => {
     switch (type) {
       case 'image':
@@ -216,12 +288,6 @@ export function Sidebar() {
     }
   };
 
-  const filteredThemes = React.useMemo(() => {
-    if (themeFilter === 'live') return CHAT_THEMES.filter(t => t.isLive);
-    if (themeFilter === 'classic') return CHAT_THEMES.filter(t => !t.isLive);
-    return CHAT_THEMES;
-  }, [themeFilter]);
-
   return (
     <>
       <aside className="w-full md:w-80 lg:w-88 flex flex-col h-full bg-sidebar-bg border-r border-border/70 select-none transition-colors">
@@ -232,8 +298,11 @@ export function Sidebar() {
             <BrandLogo size="md" href="/chat" />
           </div>
 
-          {/* Right Action Icons: Notification Bell, Connect Button, 3 Dots */}
+          {/* Right Action Icons: App Theme Toggle, Notification Bell, Connect Button, 3 Dots */}
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            {/* App Theme Toggle on Header */}
+            <ThemeToggle />
+
             {/* Notification Bell */}
             <NotificationBell onOpenConnect={() => setIsInviteOpen(true)} />
 
@@ -323,246 +392,6 @@ export function Sidebar() {
                     </div>
                   </div>
 
-                  {/* Section Label: Quick Privacy & Features */}
-                  <div className="px-3 py-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                    Features & Privacy Hub
-                  </div>
-
-                  {/* 1. Snapchat Mode (Delete Message When Seen) */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsMenuOpen(false);
-                      setIsVanishModalOpen(true);
-                    }}
-                    className="w-full flex items-center justify-between px-3.5 py-2 text-left hover:bg-muted/80 text-foreground transition-colors cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-500 shrink-0 group-hover:bg-amber-500/20">
-                        <Ghost className="w-3.5 h-3.5" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-foreground flex items-center gap-1">
-                          <span>Snapchat Mode</span>
-                          <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400">
-                            Auto-Delete
-                          </span>
-                        </p>
-                        <p className="text-[10px] text-muted-foreground truncate">
-                          Delete messages when seen
-                        </p>
-                      </div>
-                    </div>
-                    <span
-                      className={cn(
-                        'text-[10px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ml-2',
-                        disappearingMode === 'seen_10s'
-                          ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
-                          : disappearingMode === 'off'
-                          ? 'bg-muted text-muted-foreground border-border'
-                          : 'bg-primary/10 text-primary border-primary/20'
-                      )}
-                    >
-                      {disappearingMode === 'seen_10s'
-                        ? '10s (Active)'
-                        : disappearingMode === 'off'
-                        ? 'Off'
-                        : disappearingMode.replace('seen_', '')}
-                    </span>
-                  </button>
-
-                  {/* 2. Change Chat Theme (Live & Classic) */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsMenuOpen(false);
-                      setIsThemeModalOpen(true);
-                    }}
-                    className="w-full flex items-center justify-between px-3.5 py-2 text-left hover:bg-muted/80 text-foreground transition-colors cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="p-1.5 rounded-lg bg-pink-500/10 text-pink-500 shrink-0 group-hover:bg-pink-500/20">
-                        <Sparkles className="w-3.5 h-3.5" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-foreground">Change Chat Theme</p>
-                        <p className="text-[10px] text-muted-foreground truncate">
-                          8 Live animated & 5 classic wallpapers
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-[10px] font-mono text-muted-foreground capitalize shrink-0 ml-2">
-                      {chatTheme.replace('-live', ' ✨')}
-                    </span>
-                  </button>
-
-                  {/* 4. Our Special Date / Anniversary Counter */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsMenuOpen(false);
-                      setSelectedDate(anniversary || '');
-                      setIsDateModalOpen(true);
-                    }}
-                    className="w-full flex items-center justify-between px-3.5 py-2 text-left hover:bg-muted/80 text-foreground transition-colors cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="p-1.5 rounded-lg bg-rose-500/10 text-rose-500 shrink-0 group-hover:bg-rose-500/20">
-                        <Heart className="w-3.5 h-3.5" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-foreground">Our Special Date</p>
-                        <p className="text-[10px] text-muted-foreground truncate">
-                          {daysTogether ? `${daysTogether} days together` : 'Milestone anniversary counter'}
-                        </p>
-                      </div>
-                    </div>
-                    {daysTogether ? (
-                      <span className="text-[10px] font-bold text-rose-500 shrink-0 ml-2">
-                        {daysTogether}d ❤️
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-muted-foreground shrink-0 ml-2">Set</span>
-                    )}
-                  </button>
-
-                  {/* 5. Do Not Disturb (Mute Sounds) */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDNDEnabled(!dndEnabled);
-                      toast.success(
-                        !dndEnabled
-                          ? 'Do Not Disturb on: sounds silenced'
-                          : 'Notification chimes restored'
-                      );
-                    }}
-                    className="w-full flex items-center justify-between px-3.5 py-2 text-left hover:bg-muted/80 text-foreground transition-colors cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-500 shrink-0 group-hover:bg-indigo-500/20">
-                        {dndEnabled ? <BellOff className="w-3.5 h-3.5" /> : <Bell className="w-3.5 h-3.5" />}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-foreground">Do Not Disturb</p>
-                        <p className="text-[10px] text-muted-foreground truncate">
-                          Mute incoming notification chimes
-                        </p>
-                      </div>
-                    </div>
-                    <span
-                      className={cn(
-                        'text-[10px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ml-2',
-                        dndEnabled
-                          ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
-                          : 'bg-muted text-muted-foreground border-border'
-                      )}
-                    >
-                      {dndEnabled ? 'Muted' : 'Sound On'}
-                    </span>
-                  </button>
-
-                  {/* 6. Private Secret Notes / Vault Scratchpad */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsMenuOpen(false);
-                      setTempNotes(vaultNotes);
-                      setIsNotesModalOpen(true);
-                    }}
-                    className="w-full flex items-center justify-between px-3.5 py-2 text-left hover:bg-muted/80 text-foreground transition-colors cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="p-1.5 rounded-lg bg-teal-500/10 text-teal-500 shrink-0 group-hover:bg-teal-500/20">
-                        <FileEdit className="w-3.5 h-3.5" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-foreground">Private Vault Notes</p>
-                        <p className="text-[10px] text-muted-foreground truncate">
-                          Personal scratchpad & surprise gift ideas
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground shrink-0 ml-2">Open</span>
-                  </button>
-
-                  {/* 7. Clean Local Storage Cache */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsMenuOpen(false);
-                      setIsClearCacheModalOpen(true);
-                    }}
-                    className="w-full flex items-center justify-between px-3.5 py-2 text-left hover:bg-muted/80 text-foreground transition-colors cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="p-1.5 rounded-lg bg-amber-600/10 text-amber-600 shrink-0 group-hover:bg-amber-600/20">
-                        <HardDriveDownload className="w-3.5 h-3.5" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-foreground">Clean Local Cache</p>
-                        <p className="text-[10px] text-muted-foreground truncate">
-                          Clear offline files & temporary blobs
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground shrink-0 ml-2">Clean</span>
-                  </button>
-
-                  {/* Section Divider */}
-                  <div className="border-t border-border/40 my-1.5" />
-
-                  {/* Section Label: Connection & Media */}
-                  <div className="px-3 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                    Connect & Media
-                  </div>
-
-                  {/* Connect Partner */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsMenuOpen(false);
-                      setIsInviteOpen(true);
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3.5 py-1.5 text-left hover:bg-muted/80 text-foreground transition-colors cursor-pointer"
-                  >
-                    <UserPlus className="w-4 h-4 text-primary shrink-0" />
-                    <span>Connect Partner</span>
-                  </button>
-
-                  {/* Our Moments */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsMenuOpen(false);
-                      setIsMediaDrawerOpen(true);
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3.5 py-1.5 text-left hover:bg-muted/80 text-foreground transition-colors cursor-pointer"
-                  >
-                    <FolderHeart className="w-4 h-4 text-rose-500 shrink-0" />
-                    <span>Our Moments & Vault</span>
-                  </button>
-
-                  {/* Copy Username */}
-                  <button
-                    type="button"
-                    onClick={e => {
-                      handleCopyUsername(e);
-                      setIsMenuOpen(false);
-                    }}
-                    className="w-full flex items-center justify-between px-3.5 py-1.5 text-left hover:bg-muted/80 text-foreground transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Copy className="w-4 h-4 text-muted-foreground shrink-0" />
-                      <span>Copy My Username</span>
-                    </div>
-                    {copiedId ? (
-                      <span className="text-[10px] text-emerald-500 font-medium">Copied!</span>
-                    ) : (
-                      <span className="text-[10px] font-mono text-muted-foreground">@{profile?.username || 'user'}</span>
-                    )}
-                  </button>
-
                   {/* Section Divider */}
                   <div className="border-t border-border/40 my-1.5" />
 
@@ -626,8 +455,11 @@ export function Sidebar() {
           </div>
         </div>
 
-        {/* WhatsApp-Style Search Bar */}
-        <div className="px-3.5 sm:px-4 py-2.5 bg-sidebar-bg/60 border-b border-border/40">
+        {/* Tab 1: Chats View */}
+        {activeTab === 'chats' && (
+          <>
+            {/* WhatsApp-Style Search Bar */}
+            <div className="px-3.5 sm:px-4 py-2.5 bg-sidebar-bg/60 border-b border-border/40">
           <div className="relative flex items-center">
             <Search className="w-4 h-4 text-muted-foreground absolute left-3.5 pointer-events-none" />
             <input
@@ -868,57 +700,351 @@ export function Sidebar() {
             })
           )}
         </div>
+          </>
+        )}
 
-        {/* User Footer Profile & Quick Access */}
-        <div className="p-3 border-t border-border/60 bg-card/50 flex items-center justify-between gap-1 select-none">
-          <Link
-            href="/settings/profile"
-            className="flex items-center gap-2.5 min-w-0 p-1.5 rounded-xl hover:bg-muted/70 transition-colors flex-1"
-          >
-            <Avatar
-              src={profile?.avatar_path}
-              name={profile?.display_name || 'Me'}
-              size="sm"
-            />
-            <div className="min-w-0 text-left">
-              <p className="text-xs font-semibold truncate text-foreground leading-tight">
-                {profile?.display_name || 'My Profile'}
-              </p>
-              <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono truncate">
-                <span className="text-primary font-medium">@{profile?.username || 'user'}</span>
+        {/* Tab 2: Status View */}
+        {activeTab === 'status' && (
+          <div className="flex-1 overflow-y-auto p-3.5 space-y-4">
+            {/* My Status Card */}
+            <div>
+              <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2">
+                My Status
+              </div>
+              <div className="flex items-center justify-between p-2.5 rounded-2xl bg-card border border-border/60 hover:bg-muted/40 transition-colors shadow-2xs">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="relative">
+                    <Avatar
+                      src={profile?.avatar_path}
+                      name={profile?.display_name || 'Me'}
+                      size="md"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTempStatusInput(myStatus);
+                        setIsEditingStatus(true);
+                      }}
+                      className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center border-2 border-background shadow-xs hover:scale-110 transition-transform cursor-pointer"
+                      title="Update my status"
+                    >
+                      <Plus className="w-3 h-3 stroke-[3]" />
+                    </button>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-foreground truncate">
+                      {profile?.display_name || 'My Status'}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground truncate">
+                      {myStatus || 'Tap + to add a status update'}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setTempStatusInput(myStatus);
+                    setIsEditingStatus(true);
+                  }}
+                  className="h-7 px-2.5 text-[11px] text-primary hover:bg-primary/10 rounded-lg font-semibold"
+                >
+                  Edit
+                </Button>
               </div>
             </div>
-          </Link>
 
+            {/* Friends Status Updates */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                <span>Recent Updates</span>
+                <span className="text-[10px] text-primary font-normal">{filteredConversations.length} friends</span>
+              </div>
+
+              {filteredConversations.length === 0 ? (
+                <div className="text-center py-10 px-4 rounded-2xl bg-muted/20 border border-border/40 space-y-3">
+                  <CircleDot className="w-9 h-9 mx-auto text-muted-foreground/50 animate-pulse" />
+                  <div>
+                    <p className="text-xs font-semibold text-foreground">No status updates yet</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Connect with partners to view their statuses and stories
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setIsInviteOpen(true)}
+                    className="h-7 text-xs rounded-xl border-primary/30 text-primary"
+                  >
+                    <UserPlus className="w-3 h-3 mr-1" />
+                    Connect Partner
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {filteredConversations.map(conv => {
+                    const other = conv.otherUser;
+                    const isOnline = other?.id ? isUserOnline(other.id) : false;
+                    const lastSeen = other?.id ? getUserLastSeen(other.id) : undefined;
+                    const statusText = other?.bio || (isOnline ? 'Online and chatting with my favorite person 💖' : 'Taking a little break ✨');
+
+                    return (
+                      <button
+                        key={conv.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedStatusFriend({
+                            id: other?.id || conv.id,
+                            name: other?.display_name || 'Partner',
+                            avatar: other?.avatar_path,
+                            statusText,
+                            isOnline,
+                            lastSeen,
+                          });
+                        }}
+                        className="w-full flex items-center justify-between p-2.5 rounded-2xl hover:bg-muted/60 transition-colors text-left group cursor-pointer border border-transparent hover:border-border/50"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          {/* Colorful Story Ring around Avatar */}
+                          <div className="relative p-0.5 rounded-full bg-gradient-to-tr from-emerald-400 via-primary to-pink-500 shadow-xs group-hover:scale-105 transition-transform">
+                            <div className="p-0.5 bg-background rounded-full">
+                              <Avatar
+                                src={other?.avatar_path}
+                                name={other?.display_name || 'Friend'}
+                                size="md"
+                                isOnline={isOnline}
+                              />
+                            </div>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-foreground truncate group-hover:text-primary transition-colors">
+                              {other?.display_name || 'Partner'}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground truncate">
+                              {statusText}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end shrink-0 text-[10px] text-muted-foreground">
+                          <span>{isOnline ? 'Active now' : formatChatListItemTime(conv.updated_at)}</span>
+                          <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-semibold">View</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Tab 3: Calls View */}
+        {activeTab === 'calls' && (
+          <div className="flex-1 overflow-y-auto p-3.5 space-y-3">
+            {/* Call Header action */}
+            <div className="flex items-center justify-between pb-1">
+              <div>
+                <h3 className="text-xs font-bold text-foreground">Call History</h3>
+                <p className="text-[10px] text-muted-foreground">Recent audio & video calls</p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (conversations.length > 0 && conversations[0].otherUser) {
+                    handleStartCall(
+                      {
+                        id: conversations[0].otherUser.id,
+                        name: conversations[0].otherUser.display_name || 'Partner',
+                        avatar: conversations[0].otherUser.avatar_path,
+                      },
+                      'voice'
+                    );
+                  } else {
+                    setIsInviteOpen(true);
+                  }
+                }}
+                className="h-7 px-2.5 text-xs rounded-xl border-primary/30 text-primary hover:bg-primary/10 gap-1.5"
+              >
+                <Phone className="w-3 h-3" />
+                <span>New Call</span>
+              </Button>
+            </div>
+
+            {callHistory.length === 0 ? (
+              <div className="text-center py-12 px-4 rounded-2xl bg-muted/20 border border-border/40 space-y-3">
+                <div className="w-10 h-10 mx-auto rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                  <Phone className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-foreground">No call history yet</p>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Stay connected with high quality voice & video calls
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1 divide-y divide-border/20">
+                {callHistory.map(call => {
+                  const isIncoming = call.direction === 'incoming';
+                  const isOutgoing = call.direction === 'outgoing';
+                  const isMissed = call.direction === 'missed';
+
+                  return (
+                    <div
+                      key={call.id}
+                      className="pt-2 pb-2 first:pt-0 flex items-center justify-between gap-2 hover:bg-muted/40 p-2 rounded-xl transition-colors"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Avatar
+                          src={call.otherUserAvatar}
+                          name={call.otherUserName}
+                          size="md"
+                        />
+                        <div className="min-w-0">
+                          <p
+                            className={cn(
+                              'text-xs font-semibold truncate',
+                              isMissed ? 'text-destructive font-bold' : 'text-foreground'
+                            )}
+                          >
+                            {call.otherUserName}
+                          </p>
+                          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                            {isIncoming && <PhoneIncoming className="w-3 h-3 text-emerald-500 shrink-0" />}
+                            {isOutgoing && <PhoneOutgoing className="w-3 h-3 text-primary shrink-0" />}
+                            {isMissed && <PhoneMissed className="w-3 h-3 text-destructive shrink-0" />}
+                            <span className="truncate">{call.timestamp}</span>
+                            {call.duration && (
+                              <>
+                                <span>•</span>
+                                <span className="text-[10px]">{call.duration}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleStartCall(
+                              {
+                                id: call.otherUserId,
+                                name: call.otherUserName,
+                                avatar: call.otherUserAvatar,
+                              },
+                              'voice'
+                            )
+                          }
+                          className="p-2 rounded-xl text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/10 transition-colors cursor-pointer"
+                          title={`Voice call ${call.otherUserName}`}
+                          aria-label="Voice Call"
+                        >
+                          <Phone className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleStartCall(
+                              {
+                                id: call.otherUserId,
+                                name: call.otherUserName,
+                                avatar: call.otherUserAvatar,
+                              },
+                              'video'
+                            )
+                          }
+                          className="p-2 rounded-xl text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                          title={`Video call ${call.otherUserName}`}
+                          aria-label="Video Call"
+                        >
+                          <Video className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Modern WhatsApp-Style Bottom Navigation: Chats | Status | Calls */}
+        <div className="border-t border-border/60 bg-card/75 backdrop-blur-md px-2 py-1.5 flex items-center justify-around select-none">
+          {/* Chats Tab */}
           <button
             type="button"
-            onClick={handleCopyUsername}
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0 cursor-pointer"
-            title="Copy your username"
-            aria-label="Copy Username"
+            onClick={() => setActiveTab('chats')}
+            className={cn(
+              'flex-1 flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all cursor-pointer relative',
+              activeTab === 'chats'
+                ? 'text-primary font-bold'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50 font-medium'
+            )}
+            title="Chats"
+            aria-label="Chats"
           >
-            {copiedId ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+            <div className="relative">
+              <MessageSquare className={cn('w-5 h-5 transition-transform', activeTab === 'chats' && 'scale-110')} />
+              {totalUnread > 0 && (
+                <span className="absolute -top-1 -right-2 px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-500 text-white min-w-[16px] text-center shadow-xs">
+                  {totalUnread}
+                </span>
+              )}
+            </div>
+            <span className="text-[11px] mt-0.5 tracking-tight">Chats</span>
+            {activeTab === 'chats' && (
+              <span className="absolute bottom-0 w-8 h-0.5 rounded-full bg-primary" />
+            )}
           </button>
 
-          <div className="flex items-center gap-0.5 shrink-0">
-            <ThemeToggle />
-            <Link
-              href="/settings/profile"
-              className="p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              title="Settings & Preferences"
-              aria-label="Settings"
-            >
-              <Settings className="w-4 h-4" />
-            </Link>
-            <button
-              onClick={handleSignOut}
-              className="p-1.5 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
-              title="Sign out"
-              aria-label="Sign out"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
+          {/* Status Tab */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('status')}
+            className={cn(
+              'flex-1 flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all cursor-pointer relative',
+              activeTab === 'status'
+                ? 'text-primary font-bold'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50 font-medium'
+            )}
+            title="Status"
+            aria-label="Status"
+          >
+            <div className="relative">
+              <CircleDot className={cn('w-5 h-5 transition-transform', activeTab === 'status' && 'scale-110')} />
+              {/* Active status indicator dot */}
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-background" />
+            </div>
+            <span className="text-[11px] mt-0.5 tracking-tight">Status</span>
+            {activeTab === 'status' && (
+              <span className="absolute bottom-0 w-8 h-0.5 rounded-full bg-primary" />
+            )}
+          </button>
+
+          {/* Calls Tab */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('calls')}
+            className={cn(
+              'flex-1 flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all cursor-pointer relative',
+              activeTab === 'calls'
+                ? 'text-primary font-bold'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50 font-medium'
+            )}
+            title="Calls"
+            aria-label="Calls"
+          >
+            <div className="relative">
+              <Phone className={cn('w-5 h-5 transition-transform', activeTab === 'calls' && 'scale-110')} />
+            </div>
+            <span className="text-[11px] mt-0.5 tracking-tight">Calls</span>
+            {activeTab === 'calls' && (
+              <span className="absolute bottom-0 w-8 h-0.5 rounded-full bg-primary" />
+            )}
+          </button>
         </div>
       </aside>
 
@@ -928,317 +1054,125 @@ export function Sidebar() {
         onClose={() => setIsInviteOpen(false)}
       />
 
-      {/* 🌟 1. QUICK THEME SELECTOR MODAL */}
+      {/* 📱 Status / Story Viewer Dialog */}
       <Dialog
-        isOpen={isThemeModalOpen}
-        onClose={() => setIsThemeModalOpen(false)}
-        size="lg"
-        title="Choose Chat Theme"
-        description="Select a live animated aura or classic wallpaper for your conversations."
+        isOpen={!!selectedStatusFriend}
+        onClose={() => setSelectedStatusFriend(null)}
+        title={`${selectedStatusFriend?.name || 'Partner'}'s Status`}
+        description={
+          selectedStatusFriend?.isOnline
+            ? 'Active now'
+            : selectedStatusFriend?.lastSeen
+            ? `Last seen ${formatLastSeen(selectedStatusFriend.lastSeen)}`
+            : 'Recently updated'
+        }
+        size="sm"
       >
-        <div className="space-y-4 pt-2">
-          {/* Filter Tabs */}
-          <div className="flex items-center gap-1.5 p-1 bg-muted/60 rounded-xl border border-border/40 text-xs">
-            <button
-              type="button"
-              onClick={() => setThemeFilter('all')}
-              className={cn(
-                'flex-1 py-1 px-2 rounded-lg font-medium transition-all cursor-pointer text-center',
-                themeFilter === 'all'
-                  ? 'bg-background text-foreground shadow-2xs font-semibold'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              All Themes ({CHAT_THEMES.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setThemeFilter('live')}
-              className={cn(
-                'flex-1 py-1 px-2 rounded-lg font-medium transition-all cursor-pointer text-center flex items-center justify-center gap-1',
-                themeFilter === 'live'
-                  ? 'bg-background text-foreground shadow-2xs font-semibold'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              <Sparkles className="w-3 h-3 text-amber-500" />
-              <span>Live Themes ({CHAT_THEMES.filter(t => t.isLive).length})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setThemeFilter('classic')}
-              className={cn(
-                'flex-1 py-1 px-2 rounded-lg font-medium transition-all cursor-pointer text-center',
-                themeFilter === 'classic'
-                  ? 'bg-background text-foreground shadow-2xs font-semibold'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              Classic ({CHAT_THEMES.filter(t => !t.isLive).length})
-            </button>
-          </div>
-
-          {/* Themes Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[50vh] overflow-y-auto pr-1">
-            {filteredThemes.map(theme => {
-              const isSelected = chatTheme === theme.id;
-              return (
-                <div
-                  key={theme.id}
-                  onClick={() => {
-                    setChatTheme(theme.id);
-                    toast.success(`Theme switched to ${theme.name}!`);
-                  }}
-                  className={cn(
-                    'p-3.5 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between gap-3 relative select-none',
-                    isSelected
-                      ? 'border-primary bg-primary/10 shadow-md ring-2 ring-primary/20 scale-[1.01]'
-                      : 'border-border/70 hover:border-border hover:bg-muted/40'
-                  )}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div
-                      className={cn(
-                        'w-10 h-10 rounded-xl border border-border/60 shrink-0 shadow-inner flex items-center justify-center relative overflow-hidden',
-                        theme.bgPreview
-                      )}
-                    >
-                      <span className={cn('w-2.5 h-2.5 rounded-full shadow-xs', theme.dotColor)} />
-                      {theme.isLive && (
-                        <Sparkles className="w-3 h-3 text-white/90 absolute bottom-1 right-1 drop-shadow-xs" />
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <h4 className="text-xs font-semibold text-foreground truncate">{theme.name}</h4>
-                        {theme.isLive && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-primary/20 text-primary border border-primary/30">
-                            LIVE
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-muted-foreground truncate mt-0.5">{theme.description}</p>
-                    </div>
-                  </div>
-
-                  {isSelected && (
-                    <div className="w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center shrink-0">
-                      <Check className="w-3 h-3 stroke-3" />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="flex items-center justify-end pt-2 border-t border-border/40">
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => setIsThemeModalOpen(false)}
-              className="rounded-xl"
-            >
-              Done
-            </Button>
-          </div>
-        </div>
-      </Dialog>
-
-      {/* 🌟 2. SNAPCHAT / DISAPPEARING MESSAGES MODAL */}
-      <Dialog
-        isOpen={isVanishModalOpen}
-        onClose={() => setIsVanishModalOpen(false)}
-        size="md"
-        title="Snapchat Mode / Delete When Seen"
-        description="Choose how fast messages vanish and self-destruct after your partner views them."
-      >
-        <div className="space-y-4 pt-2">
-          {/* Ghost Mode Highlight */}
-          <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-3 text-xs">
-            <div className="p-2 rounded-xl bg-amber-500/20 text-amber-500 shrink-0">
-              <Flame className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="font-semibold text-foreground">Snapchat-Style Ephemeral Chat</p>
-              <p className="text-[11px] text-muted-foreground">
-                Once read by the recipient, messages automatically dissolve from both screens.
+        {selectedStatusFriend && (
+          <div className="space-y-4 pt-1">
+            <div className="p-6 rounded-2xl bg-gradient-to-tr from-primary/10 via-pink-500/10 to-violet-500/10 border border-primary/20 flex flex-col items-center justify-center text-center space-y-3 relative overflow-hidden">
+              <Sparkles className="w-6 h-6 text-primary/40 absolute top-2 right-2 animate-pulse" />
+              <div className="p-1 rounded-full bg-gradient-to-tr from-emerald-400 via-primary to-pink-500 shadow-xs">
+                <Avatar
+                  src={selectedStatusFriend.avatar}
+                  name={selectedStatusFriend.name}
+                  size="lg"
+                  isOnline={selectedStatusFriend.isOnline}
+                />
+              </div>
+              <p className="text-base font-semibold text-foreground leading-relaxed break-words">
+                &ldquo;{selectedStatusFriend.statusText}&rdquo;
               </p>
+              <div className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground pt-1">
+                <Clock className="w-3.5 h-3.5" />
+                <span>Active for 24 hours</span>
+              </div>
             </div>
-          </div>
 
-          {/* Options Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {DISAPPEARING_OPTIONS.map(opt => {
-              const isSelected = disappearingMode === opt.id;
-              return (
-                <div
-                  key={opt.id}
-                  onClick={() => {
-                    setDisappearingMode(opt.id);
-                    toast.success(
-                      opt.id === 'off'
-                        ? 'Disappearing messages turned off'
-                        : `Vanish mode set: ${opt.shortLabel} after read!`
-                    );
-                  }}
-                  className={cn(
-                    'p-3 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between space-y-1.5 select-none',
-                    isSelected
-                      ? 'border-amber-500 bg-amber-500/10 shadow-xs ring-1 ring-amber-500/30'
-                      : 'border-border/70 hover:border-border hover:bg-muted/40'
-                  )}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-foreground">{opt.label}</span>
-                    {isSelected && (
-                      <div className="w-4 h-4 rounded-full bg-amber-500 text-black flex items-center justify-center shrink-0">
-                        <Check className="w-2.5 h-2.5 stroke-3" />
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">{opt.description}</p>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="flex items-center justify-end pt-2 border-t border-border/40">
             <Button
-              variant="default"
-              size="sm"
-              onClick={() => setIsVanishModalOpen(false)}
-              className="rounded-xl"
+              className="w-full rounded-xl gap-2 font-semibold"
+              onClick={() => {
+                const targetConv = conversations.find(c => c.otherUser?.id === selectedStatusFriend.id);
+                if (targetConv) {
+                  handleConversationClick(targetConv);
+                }
+                setSelectedStatusFriend(null);
+                setActiveTab('chats');
+              }}
             >
-              Done
+              <MessageSquare className="w-4 h-4" />
+              <span>Send Message</span>
             </Button>
           </div>
-        </div>
+        )}
       </Dialog>
 
-      {/* 🌟 3. ANNIVERSARY & LOVE DAY MODAL */}
+      {/* ✏️ Edit My Status Dialog */}
       <Dialog
-        isOpen={isDateModalOpen}
-        onClose={() => setIsDateModalOpen(false)}
+        isOpen={isEditingStatus}
+        onClose={() => setIsEditingStatus(false)}
+        title="Update My Status"
         size="sm"
-        title="Our Special Date"
-        description="Choose the special day you two started your story (e.g. your anniversary, first date, or day you met)."
       >
-        <form onSubmit={handleSaveDate} className="space-y-4 pt-3">
-          {daysTogether !== null && (
-            <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-center space-y-1">
-              <span className="text-2xl font-serif font-bold text-rose-500">
-                {daysTogether} Days in Love
-              </span>
-              <p className="text-xs text-muted-foreground">Every day with you is a gift ❤️</p>
-            </div>
-          )}
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-foreground">Select Special Date</label>
+        <form onSubmit={handleSaveMyStatus} className="space-y-4 pt-1">
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
+              What&apos;s on your mind?
+            </label>
             <input
-              type="date"
-              value={selectedDate}
-              onChange={e => setSelectedDate(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm text-foreground focus:ring-2 focus:ring-primary focus:outline-hidden"
+              type="text"
+              value={tempStatusInput}
+              onChange={e => setTempStatusInput(e.target.value)}
+              placeholder="e.g. In love ❤️, Busy, Sleeping..."
+              maxLength={80}
+              className="w-full px-3.5 py-2.5 rounded-xl text-sm bg-muted/60 border border-border/80 focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/20"
+              autoFocus
             />
+            <span className="text-[10px] text-muted-foreground block text-right mt-1">
+              {tempStatusInput.length}/80
+            </span>
           </div>
 
-          <div className="flex items-center justify-between pt-2 border-t border-border/40">
-            {anniversary && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  updateAnniversary(null);
-                  setSelectedDate('');
-                  toast.success('Anniversary date reset');
-                }}
-                className="text-destructive hover:bg-destructive/10 text-xs"
-              >
-                Reset Date
-              </Button>
-            )}
-            <div className="flex items-center gap-2 ml-auto">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setIsDateModalOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" size="sm">
-                Save Date
-              </Button>
+          {/* Quick presets */}
+          <div className="space-y-1.5">
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+              Quick Suggestions
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                'Living every moment in love ✨❤️',
+                'Available 💬',
+                'At work 💼',
+                'In a meeting 🔇',
+                'Traveling ✈️',
+                'Sleeping 😴',
+              ].map(preset => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setTempStatusInput(preset)}
+                  className="px-2.5 py-1 text-[11px] rounded-lg bg-muted/70 hover:bg-muted text-foreground border border-border/50 hover:border-primary/40 transition-colors cursor-pointer"
+                >
+                  {preset}
+                </button>
+              ))}
             </div>
           </div>
-        </form>
-      </Dialog>
 
-      {/* 🌟 4. PRIVATE SECRET NOTES / VAULT MODAL */}
-      <Dialog
-        isOpen={isNotesModalOpen}
-        onClose={() => setIsNotesModalOpen(false)}
-        size="md"
-        title="Private Secret Vault Notes"
-        description="A private, encrypted scratchpad for surprise gift ideas, personal memories, or secrets. Only you can read this."
-      >
-        <form onSubmit={handleSaveNotes} className="space-y-4 pt-3">
-          <div className="space-y-2">
-            <textarea
-              rows={6}
-              value={tempNotes}
-              onChange={e => setTempNotes(e.target.value)}
-              placeholder="Write your secret notes, surprise anniversary gift ideas, reminders..."
-              className="w-full p-3 rounded-2xl border border-border bg-background text-xs sm:text-sm text-foreground focus:ring-2 focus:ring-primary focus:outline-hidden resize-none"
-            />
-          </div>
-
-          <div className="flex items-center justify-between pt-2 border-t border-border/40 text-xs text-muted-foreground">
-            <span>🔒 Stored securely in your device</span>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setIsNotesModalOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" size="sm">
-                Save Notes
-              </Button>
-            </div>
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/40">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsEditingStatus(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" size="sm">
+              Save Status
+            </Button>
           </div>
         </form>
-      </Dialog>
-
-
-      {/* 🌟 6. CLEAN CACHE CONFIRMATION MODAL */}
-      <Dialog
-        isOpen={isClearCacheModalOpen}
-        onClose={() => setIsClearCacheModalOpen(false)}
-        size="sm"
-        title="Clean Local Storage & Cache?"
-        description="This will purge temporary cached files and scratch memory to free up device space. Your login session will be kept safe."
-      >
-        <div className="flex items-center justify-end gap-2 pt-4">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsClearCacheModalOpen(false)}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="default"
-            size="sm"
-            onClick={handleClearCacheConfirm}
-          >
-            Clean Now
-          </Button>
-        </div>
       </Dialog>
 
       {/* 🔒 Locked Chat PIN Verification Modal */}

@@ -27,6 +27,9 @@ import {
   FileDown,
   Lock,
   Unlock,
+  Ghost,
+  FileEdit,
+  HardDriveDownload,
 } from 'lucide-react';
 import { useChat } from '@/context/chat-context';
 import { useAuth } from '@/context/auth-context';
@@ -40,7 +43,11 @@ import { useRouter } from 'next/navigation';
 import { downloadChatPdf } from '@/lib/export-chat-pdf';
 
 import { CHAT_THEMES, type ThemeOption } from '@/lib/chat-themes';
-import { usePrivacySettings } from '@/lib/privacy-features';
+import {
+  usePrivacySettings,
+  DISAPPEARING_OPTIONS,
+  type DisappearingMode,
+} from '@/lib/privacy-features';
 
 
 export function ConversationHeader() {
@@ -68,7 +75,7 @@ export function ConversationHeader() {
   const [isDateDialogOpen, setIsDateDialogOpen] = React.useState(false);
   const [selectedDate, setSelectedDate] = React.useState(anniversary || '');
 
-  // Chat Lock & Passcode
+  // Privacy Settings & Shifted Features
   const {
     appLockPin,
     setAppLockPin,
@@ -76,11 +83,39 @@ export function ConversationHeader() {
     setConversationChatLocked,
     isChatUnlockedInSession,
     lockChatInSession,
+    disappearingMode,
+    setDisappearingMode,
+    dndEnabled,
+    setDNDEnabled,
+    vaultNotes,
+    setVaultNotes,
+    clearLocalDataAndCache,
+    isSnapchatModeActive,
   } = usePrivacySettings();
+
   const [isPinModalOpen, setIsPinModalOpen] = React.useState(false);
   const [newPin, setNewPin] = React.useState('');
   const [confirmPin, setConfirmPin] = React.useState('');
   const [pinError, setPinError] = React.useState('');
+
+  // Shifted Feature Modals from Sidebar
+  const [isVanishModalOpen, setIsVanishModalOpen] = React.useState(false);
+  const [isNotesModalOpen, setIsNotesModalOpen] = React.useState(false);
+  const [tempNotes, setTempNotes] = React.useState(vaultNotes);
+  const [isClearCacheModalOpen, setIsClearCacheModalOpen] = React.useState(false);
+
+  const handleSaveNotes = (e: React.FormEvent) => {
+    e.preventDefault();
+    setVaultNotes(tempNotes);
+    setIsNotesModalOpen(false);
+    toast.success('Vault notes saved securely ❤️');
+  };
+
+  const handleClearCacheConfirm = () => {
+    clearLocalDataAndCache();
+    setIsClearCacheModalOpen(false);
+    toast.success('Local cache & scratch storage cleared');
+  };
 
   const isCurrentChatLocked = activeConversation?.id ? isConversationChatLocked(activeConversation.id) : false;
   const isUnlockedThisSession = activeConversation?.id ? isChatUnlockedInSession(activeConversation.id) : false;
@@ -416,25 +451,6 @@ export function ConversationHeader() {
               </Button>
             )}
 
-            {/* Media Gallery / Moments Drawer Button (hidden when chat is locked) */}
-            {(!isCurrentChatLocked || isUnlockedThisSession) && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsMediaDrawerOpen(!isMediaDrawerOpen)}
-                className={cn(
-                  'rounded-xl transition-colors cursor-pointer',
-                  isMediaDrawerOpen
-                    ? 'text-primary bg-primary/10'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                )}
-                title="Our Moments (photos, songs, saved notes)"
-                aria-label="Toggle Our Moments drawer"
-              >
-                <FolderHeart className="w-4 h-4" />
-              </Button>
-            )}
-
             {/* 3 DOTS MENU TRIGGER & DROPDOWN */}
             <div className="relative" ref={menuRef}>
               <Button
@@ -584,6 +600,61 @@ export function ConversationHeader() {
                     </>
                   )}
 
+                  {/* 🌟 Shifted from Sidebar: Snapchat Mode (Auto-Delete) */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      setIsVanishModalOpen(true);
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-foreground hover:bg-muted/80 transition-colors text-left cursor-pointer group"
+                  >
+                    <Ghost className="w-4 h-4 text-amber-500 shrink-0" />
+                    <div className="flex items-center justify-between flex-1 min-w-0">
+                      <span className="font-medium text-foreground">Snapchat Mode</span>
+                      <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-md shrink-0 ml-2">
+                        {disappearingMode === 'seen_10s'
+                          ? '10s'
+                          : disappearingMode === 'off'
+                          ? 'Off'
+                          : disappearingMode.replace('seen_', '')}
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* 🌟 Shifted from Sidebar: Do Not Disturb */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDNDEnabled(!dndEnabled);
+                      toast.success(
+                        !dndEnabled
+                          ? 'Do Not Disturb on: sounds silenced'
+                          : 'Notification chimes restored'
+                      );
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-foreground hover:bg-muted/80 transition-colors text-left cursor-pointer group"
+                  >
+                    {dndEnabled ? (
+                      <BellOff className="w-4 h-4 text-rose-500 shrink-0" />
+                    ) : (
+                      <Bell className="w-4 h-4 text-indigo-500 shrink-0" />
+                    )}
+                    <div className="flex items-center justify-between flex-1 min-w-0">
+                      <span>Do Not Disturb</span>
+                      <span
+                        className={cn(
+                          'text-[10px] font-semibold px-1.5 py-0.5 rounded-md border shrink-0 ml-2',
+                          dndEnabled
+                            ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+                            : 'bg-muted text-muted-foreground border-border'
+                        )}
+                      >
+                        {dndEnabled ? 'Muted' : 'Sound On'}
+                      </span>
+                    </div>
+                  </button>
+
                   {/* Mute Notifications */}
                   <button
                     type="button"
@@ -605,6 +676,42 @@ export function ConversationHeader() {
                       </>
                     )}
                   </button>
+
+                  {/* 🌟 Shifted from Sidebar: Private Vault Notes */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      setTempNotes(vaultNotes);
+                      setIsNotesModalOpen(true);
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-foreground hover:bg-muted/80 transition-colors text-left cursor-pointer"
+                  >
+                    <FileEdit className="w-4 h-4 text-teal-500 shrink-0" />
+                    <div className="flex items-center justify-between flex-1 min-w-0">
+                      <span>Private Vault Notes</span>
+                      <span className="text-[10px] text-muted-foreground">Notes</span>
+                    </div>
+                  </button>
+
+                  {/* 🌟 Shifted from Sidebar: Clean Local Cache */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      setIsClearCacheModalOpen(true);
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-foreground hover:bg-muted/80 transition-colors text-left cursor-pointer"
+                  >
+                    <HardDriveDownload className="w-4 h-4 text-amber-600 shrink-0" />
+                    <div className="flex items-center justify-between flex-1 min-w-0">
+                      <span>Clean Local Cache</span>
+                      <span className="text-[10px] text-muted-foreground">Clean</span>
+                    </div>
+                  </button>
+
+                  {/* Divider */}
+                  <div className="my-1.5 border-t border-border/60" />
 
                   {/* Export Chat as PDF (hidden when chat is locked) */}
                   {(!isCurrentChatLocked || isUnlockedThisSession) && (
@@ -1222,6 +1329,142 @@ export function ConversationHeader() {
             </Button>
           </div>
         </form>
+      </Dialog>
+
+      {/* 7. SNAPCHAT / DISAPPEARING MESSAGES MODAL */}
+      <Dialog
+        isOpen={isVanishModalOpen}
+        onClose={() => setIsVanishModalOpen(false)}
+        size="md"
+        title="Snapchat Mode / Delete When Seen"
+        description="Choose how fast messages vanish and self-destruct after your partner views them."
+      >
+        <div className="space-y-4 pt-2">
+          <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-3 text-xs">
+            <div className="p-2 rounded-xl bg-amber-500/20 text-amber-500 shrink-0">
+              <Flame className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="font-semibold text-foreground">Snapchat-Style Ephemeral Chat</p>
+              <p className="text-[11px] text-muted-foreground">
+                Once read by the recipient, messages automatically dissolve from both screens.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {DISAPPEARING_OPTIONS.map(opt => {
+              const isSelected = disappearingMode === opt.id;
+              return (
+                <div
+                  key={opt.id}
+                  onClick={() => {
+                    setDisappearingMode(opt.id);
+                    toast.success(
+                      opt.id === 'off'
+                        ? 'Disappearing messages turned off'
+                        : `Vanish mode set: ${opt.shortLabel} after read!`
+                    );
+                  }}
+                  className={cn(
+                    'p-3 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between space-y-1.5 select-none',
+                    isSelected
+                      ? 'border-amber-500 bg-amber-500/10 shadow-xs ring-1 ring-amber-500/30'
+                      : 'border-border/70 hover:border-border hover:bg-muted/40'
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-foreground">{opt.label}</span>
+                    {isSelected && (
+                      <div className="w-4 h-4 rounded-full bg-amber-500 text-black flex items-center justify-center shrink-0">
+                        <Check className="w-2.5 h-2.5 stroke-3" />
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">{opt.description}</p>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center justify-end pt-2 border-t border-border/40">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => setIsVanishModalOpen(false)}
+              className="rounded-xl cursor-pointer"
+            >
+              Done
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* 8. PRIVATE SECRET NOTES / VAULT MODAL */}
+      <Dialog
+        isOpen={isNotesModalOpen}
+        onClose={() => setIsNotesModalOpen(false)}
+        size="md"
+        title="Private Secret Vault Notes"
+        description="A private, encrypted scratchpad for surprise gift ideas, personal memories, or secrets. Only you can read this."
+      >
+        <form onSubmit={handleSaveNotes} className="space-y-4 pt-3">
+          <div className="space-y-2">
+            <textarea
+              rows={6}
+              value={tempNotes}
+              onChange={e => setTempNotes(e.target.value)}
+              placeholder="Write your secret notes, surprise anniversary gift ideas, reminders..."
+              className="w-full p-3 rounded-2xl border border-border bg-background text-xs sm:text-sm text-foreground focus:ring-2 focus:ring-primary focus:outline-hidden resize-none"
+            />
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t border-border/40 text-xs text-muted-foreground">
+            <span>🔒 Stored securely in your device</span>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsNotesModalOpen(false)}
+                className="cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" className="cursor-pointer">
+                Save Notes
+              </Button>
+            </div>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* 9. CLEAN CACHE CONFIRMATION MODAL */}
+      <Dialog
+        isOpen={isClearCacheModalOpen}
+        onClose={() => setIsClearCacheModalOpen(false)}
+        size="sm"
+        title="Clean Local Storage & Cache?"
+        description="This will purge temporary cached files and scratch memory to free up device space. Your login session will be kept safe."
+      >
+        <div className="flex items-center justify-end gap-2 pt-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsClearCacheModalOpen(false)}
+            className="cursor-pointer"
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleClearCacheConfirm}
+            className="cursor-pointer"
+          >
+            Clean Now
+          </Button>
+        </div>
       </Dialog>
     </>
   );
