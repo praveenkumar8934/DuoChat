@@ -54,7 +54,7 @@ import {
 import { CHAT_THEMES, type ThemeOption } from '@/lib/chat-themes';
 import { useRomanticFeatures } from '@/lib/romantic-features';
 import { LockedChatModal } from './locked-chat-modal';
-import type { ConversationWithDetails } from '@/types/chat';
+import type { ConversationWithDetails } from '@/types/database';
 
 export function Sidebar() {
   const { profile, signOut } = useAuth();
@@ -789,7 +789,9 @@ export function Sidebar() {
                       <h4 className="text-sm font-semibold truncate text-foreground flex items-center gap-1.5">
                         <span>{other?.display_name || 'Partner'}</span>
                         {isConversationChatLocked(conv.id) && (
-                          <Lock className="w-3 h-3 text-emerald-500 shrink-0" title="Locked chat" />
+                          <span title="Locked chat" className="inline-flex items-center">
+                            <Lock className="w-3 h-3 text-emerald-500 shrink-0" />
+                          </span>
                         )}
                         {other?.username && (
                           <span className="text-[10px] text-muted-foreground font-normal font-mono hidden sm:inline">

@@ -8,7 +8,7 @@ import { toast } from '@/components/ui/toast';
 import { Dialog } from '@/components/ui/dialog';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import type { ConversationWithDetails } from '@/types/chat';
+import type { ConversationWithDetails } from '@/types/database';
 
 interface LockedChatModalProps {
   isOpen: boolean;
