@@ -16,6 +16,8 @@ import { InviteModal } from '@/components/chat/invite-modal';
 import { TopNotificationBar } from '@/components/chat/notification-bar';
 import { BrandLogo } from '@/components/ui/brand-logo';
 import { toast } from '@/components/ui/toast';
+import { LockedChatOverlay } from '@/components/chat/locked-chat-overlay';
+import { usePrivacySettings } from '@/lib/privacy-features';
 
 export default function ChatPage() {
   const router = useRouter();
@@ -25,6 +27,24 @@ export default function ChatPage() {
   const [copied, setCopied] = React.useState(false);
   const [partnerInput, setPartnerInput] = React.useState('');
   const [isConnecting, setIsConnecting] = React.useState(false);
+
+  const { isConversationChatLocked, isChatUnlockedInSession, unlockChatInSession, lockChatInSession } = usePrivacySettings();
+  const isChatLocked = activeConversationId
+    ? isConversationChatLocked(activeConversationId) && !isChatUnlockedInSession(activeConversationId)
+    : false;
+  const activeConv = conversations.find(c => c.id === activeConversationId);
+
+  // Auto-relock locked chats when switching away or deselecting
+  const prevActiveIdRef = React.useRef<string | null>(activeConversationId);
+  React.useEffect(() => {
+    const prevId = prevActiveIdRef.current;
+    if (prevId && prevId !== activeConversationId) {
+      if (isConversationChatLocked(prevId)) {
+        lockChatInSession(prevId);
+      }
+    }
+    prevActiveIdRef.current = activeConversationId;
+  }, [activeConversationId, isConversationChatLocked, lockChatInSession]);
 
   // Handle mobile back gesture / browser history back
   React.useEffect(() => {
@@ -115,11 +135,23 @@ export default function ChatPage() {
       >
         <TopNotificationBar />
         {activeConversationId ? (
-          <>
-            <ConversationHeader />
-            <MessageList />
-            <MessageComposer />
-          </>
+          isChatLocked ? (
+            <>
+              <ConversationHeader />
+              <LockedChatOverlay
+                conversationId={activeConversationId}
+                partnerName={activeConv?.otherUser?.display_name || 'Partner'}
+                onUnlock={() => unlockChatInSession(activeConversationId)}
+                onClose={() => setActiveConversationId(null)}
+              />
+            </>
+          ) : (
+            <>
+              <ConversationHeader />
+              <MessageList />
+              <MessageComposer />
+            </>
+          )
         ) : (
           /* Empty state on desktop when no conversation is selected */
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-muted-foreground select-none romantic-wallpaper">

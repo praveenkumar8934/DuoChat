@@ -201,3 +201,232 @@ body {
   border: 1px solid hsl(344 30% 28%);
   box-shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.3);
 }
+
+/* Chat Wallpaper Themes & Live Animations */
+
+@keyframes liveGradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes livePulseAura {
+  0%, 100% {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.03);
+  }
+}
+
+@keyframes liveFloatingStars {
+  0% {
+    background-position: 0 0, 0 0, 0 0;
+  }
+  100% {
+    background-position: 400px 800px, 300px 300px, 200px 200px;
+  }
+}
+
+@keyframes liveCyberPulse {
+  0%, 100% {
+    background-position: 0 0, 0 0, 50% 50%;
+    opacity: 0.88;
+  }
+  50% {
+    background-position: 16px 16px, 16px 16px, 50% 50%;
+    opacity: 1;
+  }
+}
+
+/* 1. LIVE Aurora Borealis */
+.chat-theme-aurora-live {
+  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 25%, #312e81 45%, #064e3b 70%, #0f172a 100%);
+  background-size: 250% 250%;
+  animation: liveGradientShift 14s ease infinite;
+  color: #f1f5f9;
+}
+.chat-theme-aurora-live::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 25% 25%, rgba(56, 189, 248, 0.18) 0%, transparent 40%),
+              radial-gradient(circle at 75% 75%, rgba(217, 70, 239, 0.16) 0%, transparent 40%);
+  pointer-events: none;
+  animation: livePulseAura 7s ease-in-out infinite;
+}
+
+/* 2. LIVE Sakura Blossom */
+.chat-theme-sakura-live {
+  background: linear-gradient(135deg, #fff1f2 0%, #fce7f3 25%, #ffe4e6 50%, #fdf2f8 75%, #fff1f2 100%);
+  background-size: 240% 240%;
+  animation: liveGradientShift 16s ease infinite;
+}
+.chat-theme-sakura-live::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(#fb7185 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 0.25;
+  pointer-events: none;
+}
+.dark .chat-theme-sakura-live {
+  background: linear-gradient(135deg, #2a0b18 0%, #441128 30%, #1f0814 60%, #4c0f2b 100%);
+  background-size: 240% 240%;
+  animation: liveGradientShift 16s ease infinite;
+}
+.dark .chat-theme-sakura-live::before {
+  opacity: 0.35;
+}
+
+/* 3. LIVE Cosmic Nebula & Galaxy */
+.chat-theme-cosmic-live {
+  background-color: #06070d;
+  background-image: 
+    radial-gradient(1.5px 1.5px at 20px 30px, #ffffff, rgba(0,0,0,0)),
+    radial-gradient(1.5px 1.5px at 100px 140px, #e0e7ff, rgba(0,0,0,0)),
+    radial-gradient(2px 2px at 180px 90px, #f472b6, rgba(0,0,0,0)),
+    radial-gradient(1.5px 1.5px at 260px 220px, #38bdf8, rgba(0,0,0,0)),
+    radial-gradient(circle at 50% 40%, rgba(139, 92, 246, 0.16) 0%, transparent 60%);
+  background-size: 260px 260px, 220px 220px, 300px 300px, 240px 240px, 100% 100%;
+  animation: liveFloatingStars 50s linear infinite;
+  color: #f8fafc;
+}
+
+/* 4. LIVE Cyber Neon */
+.chat-theme-cyber-live {
+  background-color: #080816;
+  background-image: 
+    linear-gradient(rgba(244, 63, 94, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(6, 182, 212, 0.08) 1px, transparent 1px),
+    radial-gradient(circle at 50% 50%, rgba(168, 85, 247, 0.14) 0%, transparent 65%);
+  background-size: 30px 30px, 30px 30px, 100% 100%;
+  animation: liveCyberPulse 12s ease-in-out infinite;
+  color: #f1f5f9;
+}
+
+/* 5. LIVE Ocean Waves */
+.chat-theme-ocean-live {
+  background: linear-gradient(135deg, #091a28 0%, #0d3446 30%, #155e75 60%, #042f2e 100%);
+  background-size: 230% 230%;
+  animation: liveGradientShift 13s ease infinite;
+  color: #f8fafc;
+}
+.chat-theme-ocean-live::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 70% 30%, rgba(45, 212, 191, 0.15) 0%, transparent 45%);
+  pointer-events: none;
+  animation: livePulseAura 8s ease-in-out infinite;
+}
+
+/* 6. LIVE Golden Sunset */
+.chat-theme-golden-live {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 20%, #ffedd5 45%, #fecdd3 75%, #ffedd5 100%);
+  background-size: 240% 240%;
+  animation: liveGradientShift 14s ease infinite;
+}
+.dark .chat-theme-golden-live {
+  background: linear-gradient(135deg, #2b1103 0%, #451a03 25%, #3b071a 55%, #581c87 85%, #2e1065 100%);
+  background-size: 240% 240%;
+  animation: liveGradientShift 14s ease infinite;
+}
+
+/* 7. LIVE Emerald Breeze */
+.chat-theme-emerald-live {
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 30%, #a7f3d0 65%, #ccfbf1 100%);
+  background-size: 220% 220%;
+  animation: liveGradientShift 15s ease infinite;
+}
+.dark .chat-theme-emerald-live {
+  background: linear-gradient(135deg, #022c22 0%, #064e3b 35%, #065f46 70%, #042f2e 100%);
+  background-size: 220% 220%;
+  animation: liveGradientShift 15s ease infinite;
+}
+
+/* 8. LIVE Lavender Mist */
+.chat-theme-lavender-live {
+  background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 25%, #ede9fe 55%, #f5f3ff 100%);
+  background-size: 240% 240%;
+  animation: liveGradientShift 13s ease infinite;
+}
+.dark .chat-theme-lavender-live {
+  background: linear-gradient(135deg, #2e1065 0%, #3b0764 30%, #1e1b4b 65%, #240a34 100%);
+  background-size: 240% 240%;
+  animation: liveGradientShift 13s ease infinite;
+}
+
+/* Classic Aesthetic Themes */
+.chat-theme-romantic {
+  background-image: radial-gradient(hsl(var(--primary) / 0.06) 1.2px, transparent 1.2px);
+  background-size: 26px 26px;
+}
+.dark .chat-theme-romantic {
+  background-image: radial-gradient(hsl(var(--primary) / 0.12) 1.2px, transparent 1.2px);
+  background-size: 26px 26px;
+}
+
+.chat-theme-midnight {
+  background: radial-gradient(ellipse at top, #1e1b4b 0%, #0f172a 50%, #020617 100%);
+  background-attachment: fixed;
+  color: #f8fafc;
+}
+
+.chat-theme-sunset {
+  background: linear-gradient(180deg, rgba(254, 243, 199, 0.5) 0%, rgba(254, 215, 170, 0.3) 40%, rgba(254, 205, 211, 0.5) 100%);
+}
+.dark .chat-theme-sunset {
+  background: linear-gradient(180deg, rgba(67, 20, 7, 0.35) 0%, rgba(88, 28, 135, 0.3) 50%, rgba(76, 5, 25, 0.4) 100%);
+}
+
+.chat-theme-emerald {
+  background: linear-gradient(180deg, rgba(236, 253, 245, 0.6) 0%, rgba(209, 250, 229, 0.4) 100%);
+}
+.dark .chat-theme-emerald {
+  background: linear-gradient(180deg, rgba(6, 78, 59, 0.3) 0%, rgba(2, 44, 34, 0.4) 100%);
+}
+
+.chat-theme-lavender {
+  background: linear-gradient(180deg, rgba(245, 243, 255, 0.7) 0%, rgba(237, 233, 254, 0.4) 100%);
+}
+.dark .chat-theme-lavender {
+  background: linear-gradient(180deg, rgba(59, 7, 100, 0.3) 0%, rgba(30, 27, 75, 0.4) 100%);
+}
+
+.chat-theme-doodle {
+  background-color: #efeae2;
+  background-image: 
+    radial-gradient(#c8bfae 0.75px, transparent 0.75px),
+    radial-gradient(#c8bfae 0.75px, #efeae2 0.75px);
+  background-size: 30px 30px;
+  background-position: 0 0, 15px 15px;
+}
+.dark .chat-theme-doodle {
+  background-color: #0b141a;
+  background-image: 
+    radial-gradient(#202c33 1px, transparent 1px),
+    radial-gradient(#202c33 1px, #0b141a 1px);
+  background-size: 30px 30px;
+  background-position: 0 0, 15px 15px;
+}
+
+.chat-theme-minimal {
+  background: transparent;
+}
+
+.chat-theme-dark {
+  background-color: #000000;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+

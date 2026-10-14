@@ -6,6 +6,7 @@ import { AuthProvider } from '@/context/auth-context';
 import { ChatProvider } from '@/context/chat-context';
 import { FloatingHeartsOverlay } from '@/components/ui/floating-hearts';
 import { Toaster } from '@/components/ui/toast';
+import { AppLockOverlay } from '@/components/chat/app-lock-overlay';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -53,6 +54,7 @@ export default function RootLayout({
             <ChatProvider>
               {children}
               <FloatingHeartsOverlay />
+              <AppLockOverlay />
               <Toaster />
             </ChatProvider>
           </AuthProvider>

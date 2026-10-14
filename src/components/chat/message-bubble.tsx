@@ -17,6 +17,7 @@ import {
   Heart,
   Sparkles,
   MoreHorizontal,
+  Ghost,
 } from 'lucide-react';
 import { MessageWithDetails } from '@/types/database';
 import { useAuth } from '@/context/auth-context';
@@ -30,6 +31,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { spawnFloatingHearts } from '@/components/ui/floating-hearts';
 import { useRomanticFeatures } from '@/lib/romantic-features';
+import { usePrivacySettings } from '@/lib/privacy-features';
 import { toast } from '@/components/ui/toast';
 
 interface MessageBubbleProps {
@@ -41,6 +43,241 @@ interface MessageBubbleProps {
 }
 
 const COMMON_EMOJIS = ['❤️', '💕', '🥰', '✨', '😂', '🔥', '☕'];
+
+export interface MessageThemeStyle {
+  bubbleClass: string;
+  metaClass: string;
+  statusTickClass: string;
+}
+
+export function getMessageThemeConfig(theme: string, isOutgoing: boolean): MessageThemeStyle {
+  if (isOutgoing) {
+    switch (theme) {
+      case 'aurora-live':
+        return {
+          bubbleClass:
+            'bg-gradient-to-r from-teal-600 via-cyan-600 to-blue-600 text-white rounded-br-xs shadow-lg shadow-teal-950/30 border border-teal-300/40',
+          metaClass: 'justify-end text-white/80',
+          statusTickClass: 'text-white/80',
+        };
+
+      case 'sakura-live':
+        return {
+          bubbleClass:
+            'bg-gradient-to-r from-rose-600 to-pink-600 text-white rounded-br-xs shadow-md shadow-rose-950/20 border border-rose-300/40',
+          metaClass: 'justify-end text-white/80',
+          statusTickClass: 'text-white/80',
+        };
+
+      case 'cosmic-live':
+        return {
+          bubbleClass:
+            'bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 text-white rounded-br-xs shadow-lg shadow-purple-950/40 border border-purple-300/40',
+          metaClass: 'justify-end text-white/80',
+          statusTickClass: 'text-white/80',
+        };
+
+      case 'cyber-live':
+        return {
+          bubbleClass:
+            'bg-gradient-to-r from-pink-600 to-rose-600 text-white rounded-br-xs shadow-lg shadow-pink-950/40 border-2 border-pink-400/60',
+          metaClass: 'justify-end text-white/80',
+          statusTickClass: 'text-white/80',
+        };
+
+      case 'ocean-live':
+        return {
+          bubbleClass:
+            'bg-gradient-to-r from-cyan-600 via-sky-600 to-blue-600 text-white rounded-br-xs shadow-lg shadow-cyan-950/30 border border-cyan-300/40',
+          metaClass: 'justify-end text-white/80',
+          statusTickClass: 'text-white/80',
+        };
+
+      case 'golden-live':
+      case 'sunset':
+        return {
+          bubbleClass:
+            'bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-br-xs shadow-md shadow-amber-950/25 border border-amber-200/40',
+          metaClass: 'justify-end text-white/80',
+          statusTickClass: 'text-white/80',
+        };
+
+      case 'emerald-live':
+      case 'emerald':
+        return {
+          bubbleClass:
+            'bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-br-xs shadow-md shadow-emerald-950/25 border border-emerald-200/40',
+          metaClass: 'justify-end text-white/80',
+          statusTickClass: 'text-white/80',
+        };
+
+      case 'lavender-live':
+      case 'lavender':
+        return {
+          bubbleClass:
+            'bg-gradient-to-r from-purple-700 via-violet-600 to-fuchsia-600 text-white rounded-br-xs shadow-md shadow-purple-950/30 border border-purple-200/40',
+          metaClass: 'justify-end text-white/80',
+          statusTickClass: 'text-white/80',
+        };
+
+      case 'midnight':
+        return {
+          bubbleClass:
+            'bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 text-white rounded-br-xs shadow-lg shadow-blue-950/40 border border-blue-300/30',
+          metaClass: 'justify-end text-white/80',
+          statusTickClass: 'text-white/80',
+        };
+
+      case 'doodle':
+        return {
+          bubbleClass:
+            'bg-[#d9fdd3] dark:bg-[#005c4b] text-slate-900 dark:text-white rounded-br-xs shadow-sm border border-[#bbf7d0] dark:border-[#005c4b]',
+          metaClass: 'justify-end text-slate-600 dark:text-white/80',
+          statusTickClass: 'text-slate-600 dark:text-white/80',
+        };
+
+      case 'dark':
+        return {
+          bubbleClass:
+            'bg-zinc-800 text-white rounded-br-xs border-2 border-zinc-600 shadow-md',
+          metaClass: 'justify-end text-zinc-300',
+          statusTickClass: 'text-zinc-300',
+        };
+
+      case 'minimal':
+        return {
+          bubbleClass:
+            'bg-primary text-primary-foreground rounded-br-xs shadow-xs',
+          metaClass: 'justify-end text-primary-foreground/80',
+          statusTickClass: 'text-primary-foreground/80',
+        };
+
+      case 'romantic':
+      default:
+        return {
+          bubbleClass:
+            'bg-gradient-to-tr from-[#9f1239] via-[#be123c] to-[#e11d48] text-white rounded-br-xs shadow-md shadow-rose-950/20 border border-rose-300/25',
+          metaClass: 'justify-end text-white/80',
+          statusTickClass: 'text-white/80',
+        };
+    }
+  } else {
+    // Incoming messages: Distinct, elevated surface that clearly separates from the theme wallpaper
+    switch (theme) {
+      case 'aurora-live':
+        return {
+          bubbleClass:
+            'bg-[#1e293b]/95 backdrop-blur-md text-slate-100 border-2 border-teal-400/50 rounded-bl-xs shadow-xl shadow-black/35',
+          metaClass: 'justify-end text-slate-300',
+          statusTickClass: 'text-slate-400',
+        };
+
+      case 'sakura-live':
+        return {
+          bubbleClass:
+            'bg-white dark:bg-[#1f0b15] text-slate-900 dark:text-rose-50 border-2 border-rose-300/90 dark:border-rose-800 rounded-bl-xs shadow-md shadow-rose-950/10',
+          metaClass: 'justify-end text-slate-500 dark:text-rose-300/80',
+          statusTickClass: 'text-slate-500 dark:text-rose-300/80',
+        };
+
+      case 'cosmic-live':
+        return {
+          bubbleClass:
+            'bg-[#181829]/95 backdrop-blur-md text-purple-50 border-2 border-indigo-400/60 rounded-bl-xs shadow-xl shadow-indigo-950/50',
+          metaClass: 'justify-end text-purple-200/80',
+          statusTickClass: 'text-purple-300/80',
+        };
+
+      case 'cyber-live':
+        return {
+          bubbleClass:
+            'bg-[#111827]/95 backdrop-blur-md text-cyan-100 border-2 border-cyan-400 rounded-bl-xs shadow-xl shadow-cyan-950/50',
+          metaClass: 'justify-end text-cyan-300/80',
+          statusTickClass: 'text-cyan-300/80',
+        };
+
+      case 'ocean-live':
+        return {
+          bubbleClass:
+            'bg-[#1e293b]/95 backdrop-blur-md text-slate-100 border-2 border-cyan-400/50 rounded-bl-xs shadow-xl shadow-black/35',
+          metaClass: 'justify-end text-slate-300',
+          statusTickClass: 'text-slate-400',
+        };
+
+      case 'golden-live':
+      case 'sunset':
+        return {
+          bubbleClass:
+            'bg-white dark:bg-[#1c1109] text-slate-900 dark:text-amber-50 border-2 border-amber-300 dark:border-amber-700 rounded-bl-xs shadow-md shadow-amber-950/10',
+          metaClass: 'justify-end text-slate-500 dark:text-amber-300/80',
+          statusTickClass: 'text-slate-500 dark:text-amber-300/80',
+        };
+
+      case 'emerald-live':
+      case 'emerald':
+        return {
+          bubbleClass:
+            'bg-white dark:bg-[#062019] text-slate-900 dark:text-emerald-50 border-2 border-emerald-300 dark:border-emerald-700 rounded-bl-xs shadow-md shadow-emerald-950/10',
+          metaClass: 'justify-end text-slate-500 dark:text-emerald-300/80',
+          statusTickClass: 'text-slate-500 dark:text-emerald-300/80',
+        };
+
+      case 'lavender-live':
+      case 'lavender':
+        return {
+          bubbleClass:
+            'bg-white dark:bg-[#180a26] text-slate-900 dark:text-purple-50 border-2 border-purple-300 dark:border-purple-700 rounded-bl-xs shadow-md shadow-purple-950/10',
+          metaClass: 'justify-end text-slate-500 dark:text-purple-300/80',
+          statusTickClass: 'text-slate-500 dark:text-purple-300/80',
+        };
+
+      case 'midnight':
+        return {
+          bubbleClass:
+            'bg-[#1e293b]/95 backdrop-blur-md text-slate-100 border-2 border-indigo-400/50 rounded-bl-xs shadow-xl shadow-black/35',
+          metaClass: 'justify-end text-slate-300',
+          statusTickClass: 'text-slate-400',
+        };
+
+      case 'doodle':
+        return {
+          bubbleClass:
+            'bg-white dark:bg-[#202c33] text-slate-900 dark:text-slate-100 border border-slate-300/80 dark:border-slate-700 rounded-bl-xs shadow-sm',
+          metaClass: 'justify-end text-slate-500 dark:text-slate-400',
+          statusTickClass: 'text-slate-500 dark:text-slate-400',
+        };
+
+      case 'dark':
+        return {
+          bubbleClass:
+            'bg-zinc-900 text-zinc-100 border-2 border-zinc-700 rounded-bl-xs shadow-md',
+          metaClass: 'justify-end text-zinc-400',
+          statusTickClass: 'text-zinc-400',
+        };
+
+      case 'minimal':
+        return {
+          bubbleClass:
+            'bg-card text-card-foreground border-2 border-border rounded-bl-xs shadow-sm',
+          metaClass: 'justify-end text-muted-foreground',
+          statusTickClass: 'text-muted-foreground',
+        };
+
+      case 'romantic':
+      default:
+        return {
+          bubbleClass:
+            'bg-white dark:bg-[#1f131a] text-slate-900 dark:text-rose-100 border-2 border-rose-200 dark:border-rose-900/80 rounded-bl-xs shadow-sm',
+          metaClass: 'justify-end text-slate-500 dark:text-rose-300/80',
+          statusTickClass: 'text-slate-500 dark:text-rose-300/80',
+        };
+    }
+  }
+}
+
+export function getMessageBubbleThemeClasses(theme: string, isOutgoing: boolean): string {
+  return getMessageThemeConfig(theme, isOutgoing).bubbleClass;
+}
 
 export function MessageBubble({
   message,
@@ -56,9 +293,11 @@ export function MessageBubble({
     editMessage,
     deleteMessage,
     activeConversation,
+    chatTheme,
   } = useChat();
 
   const { isFavorite, toggleFav } = useRomanticFeatures();
+  const { isSnapchatModeActive } = usePrivacySettings();
   const isBookmarked = isFavorite(message.id);
 
   const [isEditing, setIsEditing] = React.useState(false);
@@ -70,6 +309,7 @@ export function MessageBubble({
   const touchTimerRef = React.useRef<NodeJS.Timeout | null>(null);
 
   const isOutgoing = message.sender_id === profile?.id;
+  const themeConfig = getMessageThemeConfig(chatTheme, isOutgoing);
 
   // Check if message is a "Little Note"
   const isLittleNote = message.body?.startsWith('[💌 Note]') || false;
@@ -80,28 +320,34 @@ export function MessageBubble({
   // Status icon for outgoing messages
   const renderStatus = () => {
     if (!isOutgoing) return null;
+    const tickClass = themeConfig.statusTickClass;
     switch (message.deliveryStatus) {
       case 'sending':
         return (
           <span title="Sending...">
-            <Clock className="w-3 h-3 text-white/70 animate-spin" />
+            <Clock className={cn('w-3 h-3 animate-spin', tickClass)} />
           </span>
         );
       case 'sent':
         return (
           <span title="Sent (Partner is offline)">
-            <Check className="w-3.5 h-3.5 text-white/70" />
+            <Check className={cn('w-3.5 h-3.5', tickClass)} />
           </span>
         );
       case 'delivered':
         return (
           <span title="Delivered to partner">
-            <CheckCheck className="w-3.5 h-3.5 text-white/70" />
+            <CheckCheck className={cn('w-3.5 h-3.5', tickClass)} />
           </span>
         );
       case 'read':
         return (
-          <span title="Seen by partner">
+          <span title="Seen by partner" className="inline-flex items-center gap-0.5">
+            {isSnapchatModeActive && (
+              <span title="Snapchat Mode: Vanishing on read">
+                <Ghost className="w-2.5 h-2.5 text-amber-400 animate-pulse" />
+              </span>
+            )}
             <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb] drop-shadow-[0_0_2px_rgba(83,189,235,0.8)] font-bold stroke-[2.5]" />
           </span>
         );
@@ -112,9 +358,10 @@ export function MessageBubble({
           </span>
         );
       default:
-        return <Check className="w-3.5 h-3.5 text-white/70" />;
+        return <Check className={cn('w-3.5 h-3.5', tickClass)} />;
     }
   };
+
 
   const handleCopy = () => {
     if (displayBody) {
@@ -342,9 +589,7 @@ export function MessageBubble({
           'relative max-w-[85%] sm:max-w-md rounded-2xl p-3 sm:p-3.5 shadow-xs transition-all cursor-pointer select-text',
           isLittleNote
             ? 'little-note-card rounded-2xl'
-            : isOutgoing
-            ? 'bg-gradient-to-tr from-[#702C45] via-[#8B3755] to-[#A84B69] text-white rounded-br-xs shadow-rose-900/10'
-            : 'bg-card/95 dark:bg-[#211B24] text-card-foreground border border-[#EDE1E5]/80 dark:border-[#382B36] rounded-bl-xs',
+            : themeConfig.bubbleClass,
           isSelected && 'ring-2 ring-primary ring-offset-2 ring-offset-background scale-[1.01]'
         )}
       >
@@ -456,11 +701,14 @@ export function MessageBubble({
             'flex items-center gap-1.5 mt-1.5 text-[10px] select-none',
             isLittleNote
               ? 'justify-end text-muted-foreground'
-              : isOutgoing
-              ? 'justify-end text-white/75'
-              : 'justify-end text-muted-foreground'
+              : themeConfig.metaClass
           )}
         >
+          {isSnapchatModeActive && (
+            <span title="Snapchat Mode (Vanish on read)" className="text-amber-500 flex items-center mr-0.5">
+              <Ghost className="w-2.5 h-2.5 animate-pulse" />
+            </span>
+          )}
           {isBookmarked && (
             <span title="Saved in Our Moments" className="text-amber-400 mr-0.5">
               <Bookmark className="w-2.5 h-2.5 fill-current" />

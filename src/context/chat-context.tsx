@@ -13,6 +13,14 @@ import {
   DeliveryStatus,
 } from '@/types/database';
 import { computeMessageDeliveryStatus } from '@/lib/utils';
+import {
+  getDisappearingMode,
+  getDisappearingSeconds,
+  getGhostMode,
+  getTypingIndicatorsEnabled,
+  isConversationChatLocked,
+  isChatUnlockedInSession,
+} from '@/lib/privacy-features';
 
 export interface ChatContextType {
   conversations: ConversationWithDetails[];
@@ -57,6 +65,9 @@ export interface ChatContextType {
     friendId: string,
     conversationId?: string
   ) => Promise<{ success: boolean; error?: string; message?: string }>;
+  clearChatHistory: (conversationId: string) => Promise<{ success: boolean; error?: string }>;
+  chatTheme: string;
+  setChatTheme: (theme: string) => void;
   onlineUserIds: Set<string>;
   isUserOnline: (userId: string) => boolean;
   getUserLastSeen: (userId: string) => string | null;
@@ -80,6 +91,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [conversations, setConversations] = useState<ConversationWithDetails[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageWithDetails[]>([]);
+  const messagesRef = useRef<MessageWithDetails[]>(messages);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [replyingTo, setReplyingTo] = useState<MessageWithDetails | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -94,6 +109,33 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   });
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
   const [userLastSeenMap, setUserLastSeenMap] = useState<Record<string, string>>({});
+  const [chatTheme, setChatThemeState] = useState<string>('romantic');
+
+  // Load wallpaper theme for current conversation
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const key = activeConversationId
+      ? `duochat_chat_theme_${activeConversationId}`
+      : 'duochat_chat_theme_default';
+    const saved =
+      localStorage.getItem(key) ||
+      localStorage.getItem('duochat_chat_theme_default') ||
+      'romantic';
+    setChatThemeState(saved);
+  }, [activeConversationId]);
+
+  const setChatTheme = useCallback(
+    (theme: string) => {
+      setChatThemeState(theme);
+      if (typeof window !== 'undefined') {
+        if (activeConversationId) {
+          localStorage.setItem(`duochat_chat_theme_${activeConversationId}`, theme);
+        }
+        localStorage.setItem('duochat_chat_theme_default', theme);
+      }
+    },
+    [activeConversationId]
+  );
 
   const isUserOnline = useCallback(
     (userId: string) => {
@@ -240,13 +282,19 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         initialAutoSelectDoneRef.current = true;
         const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768;
         if (isDesktop && convList.length > 0) {
-          setActiveConversationId(convList[0].id);
+          // If first conversation is locked, do not auto-select it without user entering PIN
+          const firstUnlocked = convList.find(c => !isConversationChatLocked(c.id));
+          if (firstUnlocked) {
+            setActiveConversationId(firstUnlocked.id);
+          } else {
+            setActiveConversationId(null);
+          }
         }
       }
     } catch (err) {
       console.error('Failed to load conversations:', err);
     }
-  }, [profile, isConfigured]);
+  }, [profile?.id, isConfigured]);
 
   // Connect with a partner via Duo ID or username (sends connection request)
   const connectWithPartner = useCallback(
@@ -450,7 +498,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   // Load messages for active conversation
   const loadMessages = useCallback(async (conversationId: string) => {
     if (!conversationId) {
-      setMessages([]);
+      setMessages(prev => (prev.length === 0 ? prev : []));
       return;
     }
     setIsLoadingMessages(true);
@@ -510,12 +558,54 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isConfigured]);
 
+  // Clear entire chat history for a conversation
+  const clearChatHistory = useCallback(
+    async (conversationId: string): Promise<{ success: boolean; error?: string }> => {
+      if (!profile?.id) return { success: false, error: 'Not authenticated' };
+
+      // Optimistically clear local messages
+      setMessages([]);
+      setConversations(prev =>
+        prev.map(c =>
+          c.id === conversationId ? { ...c, lastMessage: null } : c
+        )
+      );
+
+      try {
+        const res = await fetch('/api/chat/clear', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': profile.id,
+          },
+          body: JSON.stringify({
+            conversationId,
+            userId: profile.id,
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          await loadMessages(conversationId);
+          return { success: false, error: data.error || 'Failed to clear chat' };
+        }
+
+        await refreshConversations();
+        return { success: true };
+      } catch (err: any) {
+        await loadMessages(conversationId);
+        return { success: false, error: err?.message || 'Network error' };
+      }
+    },
+    [profile?.id, loadMessages, refreshConversations]
+  );
+
   // Initialize conversations
   useEffect(() => {
-    if (profile) {
+    if (profile?.id) {
       refreshConversations();
     }
-  }, [profile, refreshConversations]);
+  }, [profile?.id, refreshConversations]);
 
   // Realtime subscription for incoming connections and messages across all conversations
   useEffect(() => {
@@ -552,7 +642,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     return () => {
       userChannel.unsubscribe();
     };
-  }, [isConfigured, profile, refreshConversations]);
+  }, [isConfigured, profile?.id, refreshConversations]);
 
   // Global Realtime Presence across the entire app
   useEffect(() => {
@@ -653,6 +743,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     if (!isConfigured || !profile?.id) return;
 
     const sendHeartbeat = () => {
+      if (getGhostMode()) return;
       fetch('/api/presence/heartbeat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -710,14 +801,76 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     };
   }, [isConfigured, profile?.id]);
 
+  // Vanish timers map for scheduled disappearing messages (Snapchat mode)
+  const scheduledVanishTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+
+  // Schedule auto-deletion for disappearing messages
+  const scheduleDisappearingMessages = useCallback(
+    (conversationId: string, durationSeconds: number, targetMessageIds?: string[]) => {
+      if (!conversationId || durationSeconds <= 0) return;
+      const durationMs = durationSeconds * 1000;
+      const timerKey = `${conversationId}:${targetMessageIds?.sort().join(',') || 'all'}`;
+
+      if (scheduledVanishTimersRef.current.has(timerKey)) return;
+
+      const timer = setTimeout(async () => {
+        scheduledVanishTimersRef.current.delete(timerKey);
+
+        let idsToDelete = targetMessageIds;
+        if (!idsToDelete || idsToDelete.length === 0) {
+          idsToDelete = messagesRef.current.filter(m => m.conversation_id === conversationId).map(m => m.id);
+        }
+
+        if (!idsToDelete || idsToDelete.length === 0) return;
+
+        // Optimistically remove from local state
+        setMessages(prev => prev.filter(m => !idsToDelete!.includes(m.id)));
+
+        try {
+          await fetch('/api/chat/delete-message', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-user-id': profile?.id || '',
+            },
+            body: JSON.stringify({
+              conversationId,
+              messageIds: idsToDelete,
+              userId: profile?.id,
+            }),
+          });
+
+          // Broadcast deletion so partner's screen updates in real time
+          if (channelRef.current) {
+            channelRef.current.send({
+              type: 'broadcast',
+              event: 'messages-disappeared',
+              payload: {
+                conversationId,
+                messageIds: idsToDelete,
+              },
+            });
+          }
+        } catch (err) {
+          console.warn('Failed to auto-delete disappearing messages:', err);
+        }
+      }, durationMs);
+
+      scheduledVanishTimersRef.current.set(timerKey, timer);
+    },
+    [profile?.id]
+  );
+
   // Mark conversation and its unread messages as read
   const markConversationAsRead = useCallback(
     async (conversationId: string) => {
       if (!profile || !conversationId) return;
 
-      setConversations(prev =>
-        prev.map(c => (c.id === conversationId ? { ...c, unreadCount: 0 } : c))
-      );
+      setConversations(prev => {
+        const target = prev.find(c => c.id === conversationId);
+        if (!target || target.unreadCount === 0) return prev;
+        return prev.map(c => (c.id === conversationId ? { ...c, unreadCount: 0 } : c));
+      });
 
       if (isConfigured) {
         const supabase = getSupabaseBrowserClient();
@@ -748,22 +901,51 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
               },
             });
           }
+
+          // Trigger disappearing messages timer if active (Snapchat mode)
+          const disappearingMode = getDisappearingMode();
+          const vanishSeconds = getDisappearingSeconds(disappearingMode);
+          if (vanishSeconds > 0) {
+            scheduleDisappearingMessages(conversationId, vanishSeconds);
+          }
         } catch (err) {
           console.warn('Failed to mark conversation read:', err);
         }
       }
     },
-    [profile, isConfigured]
+    [profile?.id, isConfigured, scheduleDisappearingMessages]
   );
+
 
   // Handle active conversation change: load messages & mark as read
   useEffect(() => {
     if (activeConversationId) {
+      if (isConversationChatLocked(activeConversationId) && !isChatUnlockedInSession(activeConversationId)) {
+        // Locked chat: do not load or reveal messages until unlocked
+        setMessages(prev => (prev.length === 0 ? prev : []));
+        return;
+      }
       loadMessages(activeConversationId);
       markConversationAsRead(activeConversationId);
     } else {
-      setMessages([]);
+      setMessages(prev => (prev.length === 0 ? prev : []));
     }
+  }, [activeConversationId, loadMessages, markConversationAsRead]);
+
+  // When privacy state changes (e.g. chat is unlocked or locked in session), reload messages accordingly
+  useEffect(() => {
+    const handlePrivacyChange = () => {
+      if (activeConversationId) {
+        if (isConversationChatLocked(activeConversationId) && !isChatUnlockedInSession(activeConversationId)) {
+          setMessages(prev => (prev.length === 0 ? prev : []));
+        } else {
+          loadMessages(activeConversationId);
+          markConversationAsRead(activeConversationId);
+        }
+      }
+    };
+    window.addEventListener('duochat_privacy_change', handlePrivacyChange);
+    return () => window.removeEventListener('duochat_privacy_change', handlePrivacyChange);
   }, [activeConversationId, loadMessages, markConversationAsRead]);
 
   // When tab is re-focused or becomes visible, mark current conversation messages as read
@@ -784,13 +966,15 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   // When partner presence turns online, update sent messages to delivered
   useEffect(() => {
     if (friendPresence.online && activeConversationId && profile?.id) {
-      setMessages(prev =>
-        prev.map(m =>
+      setMessages(prev => {
+        const hasSent = prev.some(m => m.sender_id === profile.id && m.deliveryStatus === 'sent');
+        if (!hasSent) return prev;
+        return prev.map(m =>
           m.sender_id === profile.id && m.deliveryStatus === 'sent'
             ? { ...m, deliveryStatus: 'delivered' }
             : m
-        )
-      );
+        );
+      });
     }
   }, [friendPresence.online, activeConversationId, profile?.id]);
 
@@ -939,6 +1123,14 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                   },
                 });
               }
+
+              if (isViewingThisChat) {
+                const disappearingMode = getDisappearingMode();
+                const vanishSeconds = getDisappearingSeconds(disappearingMode);
+                if (vanishSeconds > 0) {
+                  scheduleDisappearingMessages(newMsg.conversation_id, vanishSeconds, [newMsg.id]);
+                }
+              }
             } catch (err) {
               console.warn('Error recording receipt:', err);
             }
@@ -956,6 +1148,19 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                 : m
             )
           );
+
+          // Disappearing messages timer for sender side (Snapchat mode)
+          const disappearingMode = getDisappearingMode();
+          const vanishSeconds = getDisappearingSeconds(disappearingMode);
+          if (vanishSeconds > 0) {
+            scheduleDisappearingMessages(data.conversationId, vanishSeconds);
+          }
+        }
+      })
+      .on('broadcast', { event: 'messages-disappeared' }, (payload: any) => {
+        const data = payload?.payload;
+        if (data?.conversationId === activeConversationId && Array.isArray(data?.messageIds)) {
+          setMessages(prev => prev.filter(m => !data.messageIds.includes(m.id)));
         }
       })
       .on('broadcast', { event: 'message-delivered' }, (payload: any) => {
@@ -1033,10 +1238,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
     channel.subscribe((status: string) => {
       if (status === 'SUBSCRIBED') {
-        channel.track({
-          online_at: new Date().toISOString(),
-          user_id: profile.id,
-        });
+        if (!getGhostMode()) {
+          channel.track({
+            online_at: new Date().toISOString(),
+            user_id: profile.id,
+          });
+        }
       }
     });
 
@@ -1044,14 +1251,14 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       channel.unsubscribe();
       channelRef.current = null;
     };
-  }, [isConfigured, activeConversationId, profile, activeConversation?.otherUser?.id, loadMessages]);
+  }, [isConfigured, activeConversationId, profile?.id, activeConversation?.otherUser?.id, loadMessages]);
 
   // Broadcast typing
   const broadcastTyping = useCallback(
     (isTyping: boolean) => {
       if (!profile) return;
-
       if (!isConfigured) return;
+      if (!getTypingIndicatorsEnabled() || getGhostMode()) return;
 
       if (channelRef.current) {
         channelRef.current.send({
@@ -1357,6 +1564,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         respondToRequest,
         connectWithPartner,
         deleteFriend,
+        clearChatHistory,
+        chatTheme,
+        setChatTheme,
         onlineUserIds,
         isUserOnline,
         getUserLastSeen,

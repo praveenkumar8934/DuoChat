@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useChat } from '@/context/chat-context';
 import { MessageBubble } from './message-bubble';
-import { formatMessageDate } from '@/lib/utils';
+import { formatMessageDate, cn } from '@/lib/utils';
 import { Heart, Search, Sparkles } from 'lucide-react';
 import { Avatar } from '@/components/ui/avatar';
 
@@ -14,6 +14,7 @@ export function MessageList() {
     searchQuery,
     typingUsers,
     activeConversation,
+    chatTheme,
   } = useChat();
 
   const [selectedMessageId, setSelectedMessageId] = React.useState<string | null>(null);
@@ -59,7 +60,7 @@ export function MessageList() {
 
   if (isLoadingMessages) {
     return (
-      <div className="flex-1 p-4 sm:p-6 space-y-4 overflow-y-auto romantic-wallpaper">
+      <div className={cn('flex-1 p-4 sm:p-6 space-y-4 overflow-y-auto transition-colors duration-300', `chat-theme-${chatTheme}` || 'chat-theme-romantic')}>
         <div className="flex justify-start">
           <div className="w-48 h-12 bg-muted/60 dark:bg-muted/30 animate-pulse rounded-2xl" />
         </div>
@@ -75,7 +76,7 @@ export function MessageList() {
 
   if (filteredMessages.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-muted-foreground romantic-wallpaper select-none">
+      <div className={cn('flex-1 flex flex-col items-center justify-center p-6 text-center text-muted-foreground select-none transition-colors duration-300', `chat-theme-${chatTheme}` || 'chat-theme-romantic')}>
         {searchQuery ? (
           <>
             <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
@@ -114,14 +115,11 @@ export function MessageList() {
       ref={containerRef}
       onClick={(e) => {
         // If clicked on wallpaper or background area, deselect active message
-        if (
-          e.target === containerRef.current ||
-          (e.target as HTMLElement).classList.contains('romantic-wallpaper')
-        ) {
+        if (e.target === containerRef.current) {
           setSelectedMessageId(null);
         }
       }}
-      className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-4 romantic-wallpaper"
+      className={cn('flex-1 overflow-y-auto p-3 sm:p-5 space-y-4 relative transition-colors duration-300', `chat-theme-${chatTheme}` || 'chat-theme-romantic')}
     >
       {groupedMessages.map(group => (
         <div key={group.date} className="space-y-2">
