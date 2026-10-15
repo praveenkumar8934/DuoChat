@@ -47,6 +47,7 @@ import { formatChatListItemTime, formatLastSeen, cn } from '@/lib/utils';
 import { toast } from '@/components/ui/toast';
 import { usePrivacySettings } from '@/lib/privacy-features';
 import { LockedChatModal } from './locked-chat-modal';
+import { useCall } from '@/context/call-context';
 import type { ConversationWithDetails } from '@/types/database';
 
 export interface CallRecord {
@@ -62,6 +63,7 @@ export interface CallRecord {
 
 export function Sidebar() {
   const { profile, signOut } = useAuth();
+  const { startCall } = useCall();
   const {
     conversations,
     activeConversationId,
@@ -178,24 +180,16 @@ export function Sidebar() {
   }, [conversations, callHistory.length]);
 
   const handleStartCall = (targetUser: { id: string; name: string; avatar?: string | null }, type: 'voice' | 'video') => {
-    const newRecord: CallRecord = {
-      id: `call-${Date.now()}`,
-      otherUserId: targetUser.id,
-      otherUserName: targetUser.name,
-      otherUserAvatar: targetUser.avatar,
-      type,
-      direction: 'outgoing',
-      timestamp: 'Just now',
-      duration: 'Calling...',
-    };
-    const updated = [newRecord, ...callHistory];
-    setCallHistory(updated);
-    try {
-      localStorage.setItem('duochat_call_history_v1', JSON.stringify(updated));
-    } catch {
-      // ignore
+    const targetConv = conversations.find(c => c.otherUser?.id === targetUser.id) || conversations[0];
+    if (targetConv) {
+      startCall(targetConv.id, type, {
+        id: targetUser.id,
+        name: targetUser.name,
+        avatar: targetUser.avatar,
+      });
+    } else {
+      toast.error('Connect with a partner first to start voice/video calls.');
     }
-    toast.success(`Starting ${type} call with ${targetUser.name}... 📞 End-to-end encrypted`);
   };
 
   const handleSaveMyStatus = (e?: React.FormEvent) => {

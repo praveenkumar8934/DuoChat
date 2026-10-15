@@ -30,9 +30,12 @@ import {
   Ghost,
   FileEdit,
   HardDriveDownload,
+  Phone,
+  Video,
 } from 'lucide-react';
 import { useChat } from '@/context/chat-context';
 import { useAuth } from '@/context/auth-context';
+import { useCall } from '@/context/call-context';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { formatLastSeen, cn } from '@/lib/utils';
@@ -137,6 +140,27 @@ export function ConversationHeader() {
 
   const menuRef = React.useRef<HTMLDivElement>(null);
   const friend = activeConversation?.otherUser;
+  const { startCall } = useCall();
+
+  const handleStartVoiceCall = () => {
+    if (!activeConversation?.id || !friend?.id) return;
+    startCall(activeConversation.id, 'voice', {
+      id: friend.id,
+      name: friend.display_name || 'Partner',
+      avatar: friend.avatar_path,
+      username: friend.username,
+    });
+  };
+
+  const handleStartVideoCall = () => {
+    if (!activeConversation?.id || !friend?.id) return;
+    startCall(activeConversation.id, 'video', {
+      id: friend.id,
+      name: friend.display_name || 'Partner',
+      avatar: friend.avatar_path,
+      username: friend.username,
+    });
+  };
 
   // Periodically refresh the time-ago text every 30s so "Active just now" updates to "Active 1m ago", etc.
   React.useEffect(() => {
@@ -429,6 +453,34 @@ export function ConversationHeader() {
               >
                 <CalendarHeart className="w-3.5 h-3.5 text-primary" />
                 <span>Our Date</span>
+              </Button>
+            )}
+
+            {/* Real-time Voice Call Button */}
+            {(!isCurrentChatLocked || isUnlockedThisSession) && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleStartVoiceCall}
+                className="rounded-xl text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/10 transition-colors cursor-pointer"
+                title="Start Voice Call"
+                aria-label="Voice Call"
+              >
+                <Phone className="w-4 h-4" />
+              </Button>
+            )}
+
+            {/* Real-time Video Call Button */}
+            {(!isCurrentChatLocked || isUnlockedThisSession) && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleStartVideoCall}
+                className="rounded-xl text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                title="Start Video Call"
+                aria-label="Video Call"
+              >
+                <Video className="w-4 h-4" />
               </Button>
             )}
 

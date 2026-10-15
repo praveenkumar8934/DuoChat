@@ -113,3 +113,35 @@ export interface UserPresence {
   isTyping?: boolean;
   typingInConversationId?: string | null;
 }
+
+export type CallType = 'voice' | 'video';
+
+export type CallStatus =
+  | 'initiating'
+  | 'ringing'
+  | 'accepted'
+  | 'connected'
+  | 'declined'
+  | 'cancelled'
+  | 'busy'
+  | 'missed'
+  | 'completed'
+  | 'failed';
+
+export interface Call {
+  id: string;
+  conversation_id: string;
+  initiator_id: string;
+  call_type: CallType;
+  status: CallStatus;
+  started_at: string;
+  ended_at: string | null;
+  duration_seconds: number;
+  created_at: string;
+  initiator?: Profile;
+}
+
+export interface CallWithDetails extends Call {
+  otherUser?: Profile;
+}
+

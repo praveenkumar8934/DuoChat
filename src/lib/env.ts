@@ -19,3 +19,14 @@ export const env = {
 export const isSupabaseConfigured = (): boolean => {
   return true;
 };
+
+export const livekitEnv = {
+  url: process.env.NEXT_PUBLIC_LIVEKIT_URL || process.env.LIVEKIT_URL || '',
+  apiKey: process.env.LIVEKIT_API_KEY || '',
+  apiSecret: process.env.LIVEKIT_API_SECRET || '',
+};
+
+export const isLiveKitConfigured = (): boolean => {
+  return Boolean(livekitEnv.url && livekitEnv.apiKey && livekitEnv.apiSecret);
+};
+
