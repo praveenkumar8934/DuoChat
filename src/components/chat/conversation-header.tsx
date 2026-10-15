@@ -439,23 +439,6 @@ export function ConversationHeader() {
 
           {/* Action Controls */}
           <div className="flex items-center gap-1">
-            {/* Optional Relationship Day Counter Button if not set */}
-            {daysTogether === null && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSelectedDate('');
-                  setIsDateDialogOpen(true);
-                }}
-                className="hidden sm:inline-flex rounded-xl text-xs text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 gap-1.5 font-normal cursor-pointer"
-                title="Set our anniversary or special date"
-              >
-                <CalendarHeart className="w-3.5 h-3.5 text-primary" />
-                <span>Our Date</span>
-              </Button>
-            )}
-
             {/* Real-time Voice Call Button */}
             {(!isCurrentChatLocked || isUnlockedThisSession) && (
               <Button
