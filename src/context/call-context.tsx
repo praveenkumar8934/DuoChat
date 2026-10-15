@@ -681,6 +681,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     }
 
     const currentDuration = duration;
+    const isActuallyConnected = callState === 'connected';
+    const finalStatus: CallStatus = isActuallyConnected ? 'completed' : 'cancelled';
 
     // Send call-ended broadcast
     if (callId && signalingChannelRef.current) {
@@ -688,14 +690,14 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         await signalingChannelRef.current.send({
           type: 'broadcast',
           event: 'call-ended',
-          payload: { callId, duration: currentDuration },
+          payload: { callId, duration: currentDuration, status: finalStatus },
         });
       } catch {
         // ignore
       }
     }
 
-    await updateCallStatusInDb(callId, 'completed', currentDuration);
+    await updateCallStatusInDb(callId, finalStatus, currentDuration);
 
     cleanupWebRTC();
     setCallState('idle');
@@ -703,7 +705,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     setCaller(null);
     setDuration(0);
     toast.info('Call ended');
-  }, [duration, callId, cleanupWebRTC, updateCallStatusInDb]);
+  }, [duration, callId, callState, cleanupWebRTC, updateCallStatusInDb]);
 
   // 5. MEDIA CONTROLS
   const toggleMute = React.useCallback(async () => {

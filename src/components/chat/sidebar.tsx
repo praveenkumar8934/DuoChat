@@ -33,6 +33,7 @@ import {
   Plus,
   Sparkles,
   Clock,
+  RefreshCw,
 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { useChat } from '@/context/chat-context';
@@ -52,6 +53,7 @@ import type { ConversationWithDetails } from '@/types/database';
 
 export interface CallRecord {
   id: string;
+  conversationId?: string;
   otherUserId: string;
   otherUserName: string;
   otherUserAvatar?: string | null;
@@ -59,11 +61,12 @@ export interface CallRecord {
   direction: 'incoming' | 'outgoing' | 'missed';
   timestamp: string;
   duration?: string;
+  status?: string;
 }
 
 export function Sidebar() {
   const { profile, signOut } = useAuth();
-  const { startCall } = useCall();
+  const { startCall, callState } = useCall();
   const {
     conversations,
     activeConversationId,
@@ -117,67 +120,146 @@ export function Sidebar() {
     lastSeen?: string | null;
   } | null>(null);
 
-  // Call History State
-  const [callHistory, setCallHistory] = React.useState<CallRecord[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('duochat_call_history_v1');
-        if (saved) return JSON.parse(saved);
-      } catch {
-        // fallback
-      }
-    }
-    return [];
-  });
+  // Call History State (Valid calls only)
+  const [callHistory, setCallHistory] = React.useState<CallRecord[]>([]);
+  const [isLoadingCalls, setIsLoadingCalls] = React.useState(false);
 
-  // Populate sample realistic calls if none exist and we have conversations
+  // Clear any legacy mock call history from localStorage
   React.useEffect(() => {
-    if (callHistory.length === 0 && conversations.length > 0) {
-      const generated: CallRecord[] = conversations.slice(0, 3).flatMap((conv, idx) => {
-        const name = conv.otherUser?.display_name || 'My Partner';
-        const avatar = conv.otherUser?.avatar_path;
-        const id = conv.otherUser?.id || conv.id;
-        return [
-          {
-            id: `call-1-${conv.id}`,
-            otherUserId: id,
-            otherUserName: name,
-            otherUserAvatar: avatar,
-            type: 'video' as const,
-            direction: 'incoming' as const,
-            timestamp: 'Today, 10:15 PM',
-            duration: '38 mins',
-          },
-          {
-            id: `call-2-${conv.id}`,
-            otherUserId: id,
-            otherUserName: name,
-            otherUserAvatar: avatar,
-            type: 'voice' as const,
-            direction: 'outgoing' as const,
-            timestamp: 'Yesterday, 8:40 PM',
-            duration: '15 mins',
-          },
-          {
-            id: `call-3-${conv.id}`,
-            otherUserId: id,
-            otherUserName: name,
-            otherUserAvatar: avatar,
-            type: 'voice' as const,
-            direction: 'missed' as const,
-            timestamp: 'Oct 12, 11:20 PM',
-            duration: 'Missed',
-          },
-        ];
-      });
-      setCallHistory(generated);
-      try {
-        localStorage.setItem('duochat_call_history_v1', JSON.stringify(generated));
-      } catch {
-        // ignore
-      }
+    try {
+      localStorage.removeItem('duochat_call_history_v1');
+    } catch {
+      // ignore
     }
-  }, [conversations, callHistory.length]);
+  }, []);
+
+  const fetchCallHistory = React.useCallback(async () => {
+    try {
+      setIsLoadingCalls(true);
+      const res = await fetch('/api/calls/history');
+      if (!res.ok) return;
+      const data = await res.json();
+      const calls: Array<{
+        id: string;
+        conversation_id: string;
+        initiator_id: string;
+        call_type: string;
+        status: string;
+        duration_seconds?: number;
+        created_at?: string;
+        initiator?: {
+          id: string;
+          username: string | null;
+          display_name: string;
+          avatar_path: string | null;
+        } | null;
+      }> = data.calls || [];
+
+      // Filter and format only VALID calls (completed with duration > 0, missed, or declined)
+      const validRecords: CallRecord[] = [];
+
+      for (const c of calls) {
+        if (!c.status) continue;
+        if (c.status !== 'completed' && c.status !== 'missed' && c.status !== 'declined') {
+          continue;
+        }
+        if (c.status === 'completed' && (!c.duration_seconds || c.duration_seconds <= 0)) {
+          // Cancelled dial attempts or 0-duration incomplete calls are not valid finished calls
+          continue;
+        }
+
+        const conv = conversations.find(cv => cv.id === c.conversation_id);
+        const partner = conv?.otherUser;
+        const isMyCall = profile?.id && c.initiator_id === profile.id;
+
+        const otherUserId = isMyCall
+          ? (partner?.id || c.initiator_id)
+          : (c.initiator?.id || partner?.id || c.initiator_id);
+
+        const otherUserName = isMyCall
+          ? (partner?.display_name || partner?.username || 'Partner')
+          : (c.initiator?.display_name || c.initiator?.username || partner?.display_name || 'Partner');
+
+        const otherUserAvatar = isMyCall
+          ? (partner?.avatar_path || null)
+          : (c.initiator?.avatar_path || partner?.avatar_path || null);
+
+        let direction: 'incoming' | 'outgoing' | 'missed' = isMyCall ? 'outgoing' : 'incoming';
+        if (c.status === 'missed' || (!isMyCall && c.status === 'declined')) {
+          direction = 'missed';
+        }
+
+        let durationText: string | undefined;
+        if (c.status === 'completed') {
+          const d = Number(c.duration_seconds || 0);
+          if (d >= 60) {
+            const m = Math.floor(d / 60);
+            const s = d % 60;
+            durationText = s > 0 ? `${m}m ${s}s` : `${m} min${m > 1 ? 's' : ''}`;
+          } else {
+            durationText = `${d}s`;
+          }
+        } else if (c.status === 'missed') {
+          durationText = 'Missed';
+        } else if (c.status === 'declined') {
+          durationText = 'Declined';
+        }
+
+        // Relative timestamp formatting
+        let timeStr = 'Recently';
+        if (c.created_at) {
+          const callDate = new Date(c.created_at);
+          const now = new Date();
+          const isToday = callDate.toDateString() === now.toDateString();
+          const yesterday = new Date(now);
+          yesterday.setDate(yesterday.getDate() - 1);
+          const isYesterday = callDate.toDateString() === yesterday.toDateString();
+
+          const timeFormatted = callDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          if (isToday) {
+            timeStr = `Today, ${timeFormatted}`;
+          } else if (isYesterday) {
+            timeStr = `Yesterday, ${timeFormatted}`;
+          } else {
+            timeStr = `${callDate.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${timeFormatted}`;
+          }
+        }
+
+        validRecords.push({
+          id: c.id,
+          conversationId: c.conversation_id,
+          otherUserId,
+          otherUserName,
+          otherUserAvatar,
+          type: (c.call_type === 'video' ? 'video' : 'voice') as 'voice' | 'video',
+          direction,
+          timestamp: timeStr,
+          duration: durationText,
+          status: c.status,
+        });
+      }
+
+      setCallHistory(validRecords);
+    } catch (err) {
+      console.warn('Could not load valid call history:', err);
+    } finally {
+      setIsLoadingCalls(false);
+    }
+  }, [conversations, profile?.id]);
+
+  // Fetch valid call history when Calls tab is active
+  React.useEffect(() => {
+    if (activeTab === 'calls') {
+      fetchCallHistory();
+    }
+  }, [activeTab, fetchCallHistory]);
+
+  // Also refresh after an active call terminates
+  React.useEffect(() => {
+    if (callState === 'idle') {
+      fetchCallHistory();
+    }
+  }, [callState, fetchCallHistory]);
 
   const handleStartCall = (targetUser: { id: string; name: string; avatar?: string | null }, type: 'voice' | 'video') => {
     const targetConv = conversations.find(c => c.otherUser?.id === targetUser.id) || conversations[0];
@@ -832,40 +914,58 @@ export function Sidebar() {
           </div>
         )}
 
-        {/* Tab 3: Calls View */}
+        {/* Tab 3: Calls View (Valid calls only) */}
         {activeTab === 'calls' && (
           <div className="flex-1 overflow-y-auto p-3.5 space-y-3">
             {/* Call Header action */}
             <div className="flex items-center justify-between pb-1">
               <div>
                 <h3 className="text-xs font-bold text-foreground">Call History</h3>
-                <p className="text-[10px] text-muted-foreground">Recent audio & video calls</p>
+                <p className="text-[10px] text-muted-foreground">Recent valid audio & video calls</p>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  if (conversations.length > 0 && conversations[0].otherUser) {
-                    handleStartCall(
-                      {
-                        id: conversations[0].otherUser.id,
-                        name: conversations[0].otherUser.display_name || 'Partner',
-                        avatar: conversations[0].otherUser.avatar_path,
-                      },
-                      'voice'
-                    );
-                  } else {
-                    setIsInviteOpen(true);
-                  }
-                }}
-                className="h-7 px-2.5 text-xs rounded-xl border-primary/30 text-primary hover:bg-primary/10 gap-1.5"
-              >
-                <Phone className="w-3 h-3" />
-                <span>New Call</span>
-              </Button>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={fetchCallHistory}
+                  disabled={isLoadingCalls}
+                  className="h-7 w-7 p-0 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                  title="Refresh calls"
+                >
+                  <RefreshCw className={cn('w-3.5 h-3.5', isLoadingCalls && 'animate-spin')} />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const activeConv = conversations.find(c => c.id === activeConversationId) || conversations[0];
+                    if (activeConv?.otherUser) {
+                      handleStartCall(
+                        {
+                          id: activeConv.otherUser.id,
+                          name: activeConv.otherUser.display_name || 'Partner',
+                          avatar: activeConv.otherUser.avatar_path,
+                        },
+                        'voice'
+                      );
+                    } else {
+                      setIsInviteOpen(true);
+                    }
+                  }}
+                  className="h-7 px-2.5 text-xs rounded-xl border-primary/30 text-primary hover:bg-primary/10 gap-1.5"
+                >
+                  <Phone className="w-3 h-3" />
+                  <span>New Call</span>
+                </Button>
+              </div>
             </div>
 
-            {callHistory.length === 0 ? (
+            {isLoadingCalls && callHistory.length === 0 ? (
+              <div className="text-center py-12 px-4 space-y-2">
+                <div className="w-6 h-6 mx-auto border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                <p className="text-xs text-muted-foreground">Loading call history...</p>
+              </div>
+            ) : callHistory.length === 0 ? (
               <div className="text-center py-12 px-4 rounded-2xl bg-muted/20 border border-border/40 space-y-3">
                 <div className="w-10 h-10 mx-auto rounded-full bg-primary/10 flex items-center justify-center text-primary">
                   <Phone className="w-5 h-5" />
@@ -873,7 +973,7 @@ export function Sidebar() {
                 <div>
                   <p className="text-xs font-semibold text-foreground">No call history yet</p>
                   <p className="text-[11px] text-muted-foreground mt-1">
-                    Stay connected with high quality voice & video calls
+                    Valid completed and missed calls with your partner will appear here
                   </p>
                 </div>
               </div>
@@ -887,7 +987,13 @@ export function Sidebar() {
                   return (
                     <div
                       key={call.id}
-                      className="pt-2 pb-2 first:pt-0 flex items-center justify-between gap-2 hover:bg-muted/40 p-2 rounded-xl transition-colors"
+                      className="pt-2 pb-2 first:pt-0 flex items-center justify-between gap-2 hover:bg-muted/40 p-2 rounded-xl transition-colors cursor-pointer"
+                      onClick={() => {
+                        if (call.conversationId) {
+                          const conv = conversations.find(c => c.id === call.conversationId);
+                          if (conv) handleConversationClick(conv);
+                        }
+                      }}
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <Avatar
@@ -905,6 +1011,9 @@ export function Sidebar() {
                             {call.otherUserName}
                           </p>
                           <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                            {call.type === 'video' ? (
+                              <Video className="w-3 h-3 text-muted-foreground shrink-0" />
+                            ) : null}
                             {isIncoming && <PhoneIncoming className="w-3 h-3 text-emerald-500 shrink-0" />}
                             {isOutgoing && <PhoneOutgoing className="w-3 h-3 text-primary shrink-0" />}
                             {isMissed && <PhoneMissed className="w-3 h-3 text-destructive shrink-0" />}
@@ -912,14 +1021,16 @@ export function Sidebar() {
                             {call.duration && (
                               <>
                                 <span>•</span>
-                                <span className="text-[10px]">{call.duration}</span>
+                                <span className={cn('text-[10px]', isMissed && 'text-destructive font-semibold')}>
+                                  {call.duration}
+                                </span>
                               </>
                             )}
                           </div>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1 shrink-0">
+                      <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
                         <button
                           type="button"
                           onClick={() =>
