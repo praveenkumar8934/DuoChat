@@ -1,39 +1,15 @@
 import { NextResponse } from 'next/server';
-import { createClient as createServerSupabase } from '@/lib/supabase/server';
-import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { env } from '@/lib/env';
-import { generateSecretKey, isValidSecretKeyFormat } from '@/lib/secret-key';
+import { getAuthenticatedUser, getAdminSupabase } from '@/lib/auth-server';
+import { generateSecretKey } from '@/lib/secret-key';
 
 export async function GET(req: Request) {
   try {
-    let userId: string | null = req.headers.get('x-user-id') || null;
-
-    if (!userId) {
-      try {
-        const userClient = await createServerSupabase();
-        const {
-          data: { user },
-        } = await userClient.auth.getUser();
-        if (user) {
-          userId = user.id;
-        }
-      } catch {
-        // Fallback
-      }
+    const { user, error: authError } = await getAuthenticatedUser(req);
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized: Valid authentication session is required' }, { status: 401 });
     }
-
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const serviceKey = env.supabaseServiceRoleKey;
-    if (!serviceKey || !env.supabaseUrl) {
-      return NextResponse.json({ error: 'Server configuration missing' }, { status: 500 });
-    }
-
-    const adminClient = createServiceClient(env.supabaseUrl, serviceKey, {
-      auth: { persistSession: false },
-    });
+    const userId = user.id;
+    const adminClient = getAdminSupabase();
 
     // Lookup secret key from invitations table
     const { data: keyRow, error } = await adminClient
@@ -69,34 +45,12 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    let userId: string | null = req.headers.get('x-user-id') || null;
-
-    if (!userId) {
-      try {
-        const userClient = await createServerSupabase();
-        const {
-          data: { user },
-        } = await userClient.auth.getUser();
-        if (user) {
-          userId = user.id;
-        }
-      } catch {
-        // Fallback
-      }
+    const { user, error: authError } = await getAuthenticatedUser(req);
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized: Valid authentication session is required' }, { status: 401 });
     }
-
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const serviceKey = env.supabaseServiceRoleKey;
-    if (!serviceKey || !env.supabaseUrl) {
-      return NextResponse.json({ error: 'Server configuration missing' }, { status: 500 });
-    }
-
-    const adminClient = createServiceClient(env.supabaseUrl, serviceKey, {
-      auth: { persistSession: false },
-    });
+    const userId = user.id;
+    const adminClient = getAdminSupabase();
 
     // Verify user exists in profiles
     const { data: profile } = await adminClient
@@ -115,9 +69,9 @@ export async function POST(req: Request) {
 
     let chosenKey = '';
     if (rawKey) {
-      if (rawKey.length < 4) {
+      if (rawKey.length < 8) {
         return NextResponse.json(
-          { error: 'Secret Key must be at least 4 characters long.' },
+          { error: 'Secret Key must be at least 8 characters long for security.' },
           { status: 400 }
         );
       }
@@ -145,7 +99,6 @@ export async function POST(req: Request) {
 
       chosenKey = rawKey;
     } else {
-      // Optional fallback: generate a random suggestion if no key provided
       chosenKey = generateSecretKey();
     }
 
@@ -171,7 +124,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Failed to save secret key' }, { status: 500 });
     }
 
-    // Also update auth.users user_metadata for redundancy
     try {
       await adminClient.auth.admin.updateUserById(userId, {
         user_metadata: { secret_key: chosenKey },
@@ -184,7 +136,7 @@ export async function POST(req: Request) {
       success: true,
       hasKey: true,
       secretKey: chosenKey,
-      message: 'Secret Key saved successfully! You can now use it to log in.',
+      message: 'Secret Key saved successfully in your profile!',
     });
   } catch (err: any) {
     console.error('Error in secret-key POST:', err);
@@ -194,34 +146,12 @@ export async function POST(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    let userId: string | null = req.headers.get('x-user-id') || null;
-
-    if (!userId) {
-      try {
-        const userClient = await createServerSupabase();
-        const {
-          data: { user },
-        } = await userClient.auth.getUser();
-        if (user) {
-          userId = user.id;
-        }
-      } catch {
-        // Fallback
-      }
+    const { user, error: authError } = await getAuthenticatedUser(req);
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized: Valid authentication session is required' }, { status: 401 });
     }
-
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const serviceKey = env.supabaseServiceRoleKey;
-    if (!serviceKey || !env.supabaseUrl) {
-      return NextResponse.json({ error: 'Server configuration missing' }, { status: 500 });
-    }
-
-    const adminClient = createServiceClient(env.supabaseUrl, serviceKey, {
-      auth: { persistSession: false },
-    });
+    const userId = user.id;
+    const adminClient = getAdminSupabase();
 
     await adminClient
       .from('invitations')

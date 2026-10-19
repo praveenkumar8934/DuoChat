@@ -9,9 +9,18 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
+  // Fail closed if Supabase configuration is missing
   if (!isSupabaseConfigured()) {
-    // Supabase is not configured yet - allow browsing with notice
-    return response;
+    return new NextResponse(
+      JSON.stringify({
+        error: 'Service Unavailable',
+        message: 'Database authentication service is currently unconfigured or unavailable.',
+      }),
+      {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
   }
 
   const supabase = createServerClient(
@@ -65,17 +74,29 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
-  const isProtectedPath = pathname.startsWith('/chat') || pathname.startsWith('/settings');
-  const isAuthPath = pathname === '/login' || pathname === '/signup';
 
-  if (!user && isProtectedPath) {
+  // Unauthenticated public paths
+  const isPublicAuthPath =
+    pathname === '/login' ||
+    pathname === '/signup' ||
+    pathname === '/forgot-password' ||
+    pathname === '/reset-password' ||
+    pathname.startsWith('/auth/callback') ||
+    pathname.startsWith('/invite') ||
+    pathname.startsWith('/api/auth');
+
+  // 1. Unauthenticated users cannot access the root or protected app areas
+  if (!user && !isPublicAuthPath) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
-    url.searchParams.set('redirectTo', pathname);
+    if (pathname !== '/') {
+      url.searchParams.set('redirectTo', pathname);
+    }
     return NextResponse.redirect(url);
   }
 
-  if (user && isAuthPath) {
+  // 2. Authenticated users on auth pages or root landing are sent directly to their private chat
+  if (user && (pathname === '/' || pathname === '/login' || pathname === '/signup' || pathname === '/forgot-password')) {
     const url = request.nextUrl.clone();
     url.pathname = '/chat';
     return NextResponse.redirect(url);

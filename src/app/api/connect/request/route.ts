@@ -1,11 +1,18 @@
 import { NextResponse } from 'next/server';
-import { createClient as createServerSupabase } from '@/lib/supabase/server';
-import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { cleanDuoIdentifier } from '@/lib/duo-id';
-import { env } from '@/lib/env';
+import { getAuthenticatedUser, getAdminSupabase } from '@/lib/auth-server';
 
 export async function POST(req: Request) {
   try {
+    const { user, error: authError } = await getAuthenticatedUser(req);
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'You must be logged in to connect with a partner' },
+        { status: 401 }
+      );
+    }
+    const senderId = user.id;
+
     const body = await req.json();
     const { identifier } = body;
 
@@ -16,40 +23,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1. Get authenticated user (sender)
-    let senderId: string | null = body.senderId || req.headers.get('x-user-id') || null;
-
-    if (!senderId) {
-      try {
-        const userClient = await createServerSupabase();
-        const { data: { user } } = await userClient.auth.getUser();
-        if (user) {
-          senderId = user.id;
-        }
-      } catch {
-        // Fallback check
-      }
-    }
-
-    if (!senderId) {
-      return NextResponse.json(
-        { error: 'You must be logged in to connect with a partner' },
-        { status: 401 }
-      );
-    }
-
-    // 2. Prepare database client
-    const serviceKey = env.supabaseServiceRoleKey;
-    if (!serviceKey || !env.supabaseUrl) {
-      return NextResponse.json(
-        { error: 'Server configuration missing. Check SUPABASE_SERVICE_ROLE_KEY.' },
-        { status: 500 }
-      );
-    }
-
-    const db = createServiceClient(env.supabaseUrl, serviceKey, {
-      auth: { persistSession: false },
-    });
+    const db = getAdminSupabase();
 
     const clean = cleanDuoIdentifier(identifier);
     const rawTrimmed = identifier.trim();

@@ -77,11 +77,7 @@ export default function ProfileSettingsPage() {
     if (!profile?.id) return;
     try {
       setIsLoadingKey(true);
-      const res = await fetch('/api/auth/secret-key', {
-        headers: {
-          'x-user-id': profile.id,
-        },
-      });
+      const res = await fetch('/api/auth/secret-key');
       if (res.ok) {
         const data = await res.json();
         const hasKey = !!data.hasKey;
@@ -127,7 +123,6 @@ export default function ProfileSettingsPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': profile.id,
         },
         body: JSON.stringify({ secretKey: trimmed }),
       });
@@ -139,7 +134,7 @@ export default function ProfileSettingsPage() {
         setSecretKey(data.secretKey);
         setIsEditingKey(false);
         setInputSecretKey('');
-        toast.success('Your Secret Key has been saved! You can now use it to log in.');
+        toast.success('Your Secret Key has been saved to your profile.');
       }
     } catch {
       toast.error('Could not connect to server to save key');
@@ -163,9 +158,6 @@ export default function ProfileSettingsPage() {
     try {
       const res = await fetch('/api/auth/secret-key', {
         method: 'DELETE',
-        headers: {
-          'x-user-id': profile.id,
-        },
       });
       const data = await res.json();
       if (!res.ok) {
@@ -560,7 +552,7 @@ export default function ProfileSettingsPage() {
                 )}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Create your own Secret Key. You can use it on the sign-in page to log in instantly on any device without passwords or emails.
+                Your personal private key for account identity and end-to-end verification. DuoChat strictly requires your Account ID and password to sign in.
               </p>
             </div>
           </div>

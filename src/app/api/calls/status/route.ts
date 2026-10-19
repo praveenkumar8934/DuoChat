@@ -27,8 +27,8 @@ export async function POST(req: Request) {
 
     const db = env.supabaseServiceRoleKey
       ? createServiceClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
-          auth: { persistSession: false },
-        })
+        auth: { persistSession: false },
+      })
       : userClient;
 
     const updatePayload: Record<string, unknown> = {

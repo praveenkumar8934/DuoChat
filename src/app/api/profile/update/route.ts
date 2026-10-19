@@ -1,41 +1,18 @@
 import { NextResponse } from 'next/server';
-import { createClient as createServerSupabase } from '@/lib/supabase/server';
-import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { env } from '@/lib/env';
+import { getAuthenticatedUser, getAdminSupabase } from '@/lib/auth-server';
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const { displayName, username, bio, avatarPath } = body;
-
-    let userId: string | null = req.headers.get('x-user-id') || body.userId || null;
-
-    if (!userId) {
-      try {
-        const userClient = await createServerSupabase();
-        const {
-          data: { user },
-        } = await userClient.auth.getUser();
-        if (user) {
-          userId = user.id;
-        }
-      } catch {
-        // Fallback
-      }
-    }
-
-    if (!userId) {
+    const { user, error: authError } = await getAuthenticatedUser(req);
+    if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const serviceKey = env.supabaseServiceRoleKey;
-    if (!serviceKey || !env.supabaseUrl) {
-      return NextResponse.json({ error: 'Server configuration missing' }, { status: 500 });
-    }
+    const userId = user.id;
+    const body = await req.json();
+    const { displayName, username, bio, avatarPath } = body;
 
-    const adminClient = createServiceClient(env.supabaseUrl, serviceKey, {
-      auth: { persistSession: false },
-    });
+    const adminClient = getAdminSupabase();
 
     // Check if new username is already taken by another account
     if (username) {

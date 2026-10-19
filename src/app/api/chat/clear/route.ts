@@ -1,11 +1,9 @@
 import { NextResponse } from 'next/server';
-import { createClient as createServerSupabase } from '@/lib/supabase/server';
-import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { env } from '@/lib/env';
+import { getAuthenticatedUser, getAdminSupabase } from '@/lib/auth-server';
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const { conversationId } = body;
 
     if (!conversationId) {
@@ -15,40 +13,16 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1. Get authenticated user
-    let userId: string | null = req.headers.get('x-user-id') || body.userId || null;
-
-    if (!userId) {
-      try {
-        const userClient = await createServerSupabase();
-        const {
-          data: { user },
-        } = await userClient.auth.getUser();
-        if (user) {
-          userId = user.id;
-        }
-      } catch {
-        // Fallback
-      }
-    }
-
-    if (!userId) {
+    const { user, error: authError } = await getAuthenticatedUser(req);
+    if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const serviceKey = env.supabaseServiceRoleKey;
-    if (!serviceKey || !env.supabaseUrl) {
-      return NextResponse.json(
-        { error: 'Server configuration missing' },
-        { status: 500 }
-      );
-    }
+    const userId = user.id;
 
-    const adminClient = createServiceClient(env.supabaseUrl, serviceKey, {
-      auth: { persistSession: false },
-    });
+    const adminClient = getAdminSupabase();
 
-    // 2. Verify user is a member of this conversation
+    // Verify authenticated user is a member of this conversation
     const { data: membership } = await adminClient
       .from('conversation_members')
       .select('conversation_id')
@@ -63,7 +37,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3. Soft-delete all messages in the conversation
+    // Soft-delete all messages in the conversation
     const now = new Date().toISOString();
     const { error: clearError } = await adminClient
       .from('messages')

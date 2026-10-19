@@ -1,10 +1,17 @@
 import { NextResponse } from 'next/server';
-import { createClient as createServerSupabase } from '@/lib/supabase/server';
-import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { env } from '@/lib/env';
+import { getAuthenticatedUser, getAdminSupabase } from '@/lib/auth-server';
 
 export async function POST(req: Request) {
   try {
+    const { user, error: authError } = await getAuthenticatedUser(req);
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized: Valid authentication session is required' },
+        { status: 401 }
+      );
+    }
+    const receiverId = user.id;
+
     const body = await req.json();
     const { requestId, action } = body;
 
@@ -15,36 +22,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1. Authenticate current user (receiver)
-    let receiverId: string | null = body.userId || req.headers.get('x-user-id') || null;
-
-    if (!receiverId) {
-      try {
-        const userClient = await createServerSupabase();
-        const { data: { user } } = await userClient.auth.getUser();
-        if (user) {
-          receiverId = user.id;
-        }
-      } catch {
-        // Fallback check
-      }
-    }
-
-    if (!receiverId) {
-      return NextResponse.json({ error: 'Unauthorized: User ID required' }, { status: 401 });
-    }
-
-    const serviceKey = env.supabaseServiceRoleKey;
-    if (!serviceKey || !env.supabaseUrl) {
-      return NextResponse.json(
-        { error: 'Server configuration missing. Check SUPABASE_SERVICE_ROLE_KEY.' },
-        { status: 500 }
-      );
-    }
-
-    const db = createServiceClient(env.supabaseUrl, serviceKey, {
-      auth: { persistSession: false },
-    });
+    const db = getAdminSupabase();
 
     // 2. Fetch the invitation
     const { data: requestRow, error: reqErr } = await db

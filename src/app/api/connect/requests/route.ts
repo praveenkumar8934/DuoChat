@@ -1,47 +1,18 @@
 import { NextResponse } from 'next/server';
-import { createClient as createServerSupabase } from '@/lib/supabase/server';
-import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { env } from '@/lib/env';
+import { getAuthenticatedUser, getAdminSupabase } from '@/lib/auth-server';
 
 export async function GET(req: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const paramUserId = searchParams.get('userId');
-    const headerUserId = req.headers.get('x-user-id');
-
-    let currentUserId: string | null = paramUserId || headerUserId || null;
-
-    // Fall back to server session if no header/param provided
-    if (!currentUserId) {
-      try {
-        const userClient = await createServerSupabase();
-        const { data: { user } } = await userClient.auth.getUser();
-        if (user) {
-          currentUserId = user.id;
-        }
-      } catch {
-        // Continue to check
-      }
-    }
-
-    if (!currentUserId) {
+    const { user, error: authError } = await getAuthenticatedUser(req);
+    if (authError || !user) {
       return NextResponse.json(
-        { error: 'Unauthorized: User ID required' },
+        { error: 'Unauthorized: Valid authentication session is required' },
         { status: 401 }
       );
     }
+    const currentUserId = user.id;
 
-    const serviceKey = env.supabaseServiceRoleKey;
-    if (!serviceKey || !env.supabaseUrl) {
-      return NextResponse.json(
-        { error: 'Server configuration missing' },
-        { status: 500 }
-      );
-    }
-
-    const db = createServiceClient(env.supabaseUrl, serviceKey, {
-      auth: { persistSession: false },
-    });
+    const db = getAdminSupabase();
 
     // Fetch incoming requests where token_hash ends with `:${currentUserId}`
     // token_hash format: `req:${senderId}:${receiverId}`
