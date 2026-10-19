@@ -214,11 +214,11 @@ return NextResponse.json({ exists });
    }
    ```
    If database environment variables were temporarily missing or malformed, the middleware failed open, allowing unauthenticated requests into downstream handlers.
-2. **Unprotected Root Landing Page:** Unauthenticated visitors could freely view `/` and click `"Live Preview"` pointing to `/chat`. For a private, invite-only application where "no one can access without proper ID and password", unauthenticated visitors to `/` should be directed to `/login`.
+2. **Ingress Route Protection:** Protected application areas (`/chat`, `/settings`, and internal APIs) must strictly enforce authentication, while public entry points (`/`, `/login`, `/signup`, `/forgot-password`, `/invite/[token]`) remain accessible.
 
 #### Remediation Steps
 1. Remove fail-open behavior in middleware; fail closed when database credentials are not available.
-2. Enforce authentication redirect on all non-auth pages: if unauthenticated, redirect to `/login`. If authenticated, redirect `/login`, `/signup`, and `/` to `/chat`.
+2. Enforce authentication redirect on protected app routes: if unauthenticated, redirect to `/login?redirectTo=...`. If authenticated, redirect auth entry pages (`/login`, `/signup`) to `/chat`, while allowing the landing page (`/`) to welcome visitors.
 
 ---
 

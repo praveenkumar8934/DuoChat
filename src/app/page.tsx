@@ -18,8 +18,11 @@ import {
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { BrandLogo } from '@/components/ui/brand-logo';
+import { useAuth } from '@/context/auth-context';
 
 export default function LandingPage() {
+  const { user } = useAuth();
+
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground selection:bg-rose-500/20">
       {/* Navigation Bar */}
@@ -29,16 +32,26 @@ export default function LandingPage() {
 
           <div className="flex items-center gap-3">
             <ThemeToggle />
-            <Link href="/login">
-              <Button variant="ghost" size="sm" className="rounded-xl text-xs">
-                Sign In
-              </Button>
-            </Link>
-            <Link href="/signup">
-              <Button size="sm" className="rounded-xl text-xs font-medium shadow-xs bg-gradient-to-tr from-[#702C45] to-[#C96B83] text-white">
-                Get Started
-              </Button>
-            </Link>
+            {user ? (
+              <Link href="/chat">
+                <Button size="sm" className="rounded-xl text-xs font-medium shadow-xs bg-gradient-to-tr from-[#702C45] to-[#C96B83] text-white">
+                  Open Chat
+                </Button>
+              </Link>
+            ) : (
+              <>
+                <Link href="/login">
+                  <Button variant="ghost" size="sm" className="rounded-xl text-xs">
+                    Sign In
+                  </Button>
+                </Link>
+                <Link href="/signup">
+                  <Button size="sm" className="rounded-xl text-xs font-medium shadow-xs bg-gradient-to-tr from-[#702C45] to-[#C96B83] text-white">
+                    Get Started
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -71,17 +84,28 @@ export default function LandingPage() {
 
             {/* CTAs */}
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
-              <Link href="/signup" className="w-full sm:w-auto">
-                <Button size="lg" className="w-full sm:w-auto rounded-2xl gap-2 font-semibold shadow-md bg-gradient-to-tr from-[#702C45] to-[#C96B83] text-white hover:opacity-95 cursor-pointer">
-                  Create Our Space
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </Link>
-              <Link href="/login" className="w-full sm:w-auto">
-                <Button size="lg" variant="outline" className="w-full sm:w-auto rounded-2xl cursor-pointer">
-                  Sign In
-                </Button>
-              </Link>
+              {user ? (
+                <Link href="/chat" className="w-full sm:w-auto">
+                  <Button size="lg" className="w-full sm:w-auto rounded-2xl gap-2 font-semibold shadow-md bg-gradient-to-tr from-[#702C45] to-[#C96B83] text-white hover:opacity-95 cursor-pointer">
+                    Open DuoChat
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </Link>
+              ) : (
+                <>
+                  <Link href="/signup" className="w-full sm:w-auto">
+                    <Button size="lg" className="w-full sm:w-auto rounded-2xl gap-2 font-semibold shadow-md bg-gradient-to-tr from-[#702C45] to-[#C96B83] text-white hover:opacity-95 cursor-pointer">
+                      Create Our Space
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  </Link>
+                  <Link href="/login" className="w-full sm:w-auto">
+                    <Button size="lg" variant="outline" className="w-full sm:w-auto rounded-2xl cursor-pointer">
+                      Sign In
+                    </Button>
+                  </Link>
+                </>
+              )}
               <Link href="/chat" className="w-full sm:w-auto">
                 <Button size="lg" variant="secondary" className="w-full sm:w-auto rounded-2xl gap-1.5 cursor-pointer">
                   <Sparkles className="w-4 h-4 text-primary" />

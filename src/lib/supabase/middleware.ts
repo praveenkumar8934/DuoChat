@@ -75,8 +75,9 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
 
-  // Unauthenticated public paths
-  const isPublicAuthPath =
+  // Public paths accessible without authentication (e.g. landing page, auth forms, invites)
+  const isPublicPath =
+    pathname === '/' ||
     pathname === '/login' ||
     pathname === '/signup' ||
     pathname === '/forgot-password' ||
@@ -85,18 +86,22 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith('/invite') ||
     pathname.startsWith('/api/auth');
 
-  // 1. Unauthenticated users cannot access the root or protected app areas
-  if (!user && !isPublicAuthPath) {
+  // 1. Unauthenticated users cannot access protected app areas (e.g., /chat, /settings)
+  if (!user && !isPublicPath) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
-    if (pathname !== '/') {
-      url.searchParams.set('redirectTo', pathname);
-    }
+    url.searchParams.set('redirectTo', pathname);
     return NextResponse.redirect(url);
   }
 
-  // 2. Authenticated users on auth pages or root landing are sent directly to their private chat
-  if (user && (pathname === '/' || pathname === '/login' || pathname === '/signup' || pathname === '/forgot-password')) {
+  // 2. Authenticated users accessing auth forms are redirected directly to their chat
+  const isAuthEntryPath =
+    pathname === '/login' ||
+    pathname === '/signup' ||
+    pathname === '/forgot-password' ||
+    pathname === '/reset-password';
+
+  if (user && isAuthEntryPath) {
     const url = request.nextUrl.clone();
     url.pathname = '/chat';
     return NextResponse.redirect(url);
