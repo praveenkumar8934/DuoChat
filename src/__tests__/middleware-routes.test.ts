@@ -8,6 +8,10 @@ describe('Middleware Route Protection Rules', () => {
       pathname === '/signup' ||
       pathname === '/forgot-password' ||
       pathname === '/reset-password' ||
+      pathname === '/privacy' ||
+      pathname === '/terms' ||
+      pathname === '/about' ||
+      pathname === '/safety' ||
       pathname.startsWith('/auth/callback') ||
       pathname.startsWith('/invite') ||
       pathname.startsWith('/api/auth')

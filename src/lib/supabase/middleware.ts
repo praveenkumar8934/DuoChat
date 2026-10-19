@@ -75,13 +75,17 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
 
-  // Public paths accessible without authentication (e.g. landing page, auth forms, invites)
+  // Public paths accessible without authentication (e.g. landing page, info pages, auth forms, invites)
   const isPublicPath =
     pathname === '/' ||
     pathname === '/login' ||
     pathname === '/signup' ||
     pathname === '/forgot-password' ||
     pathname === '/reset-password' ||
+    pathname === '/privacy' ||
+    pathname === '/terms' ||
+    pathname === '/about' ||
+    pathname === '/safety' ||
     pathname.startsWith('/auth/callback') ||
     pathname.startsWith('/invite') ||
     pathname.startsWith('/api/auth');

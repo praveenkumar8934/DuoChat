@@ -16,45 +16,17 @@ import {
   Bookmark,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ThemeToggle } from '@/components/theme-toggle';
-import { BrandLogo } from '@/components/ui/brand-logo';
 import { useAuth } from '@/context/auth-context';
+import { PublicHeader } from '@/components/public-header';
+import { PublicFooter } from '@/components/public-footer';
 
 export default function LandingPage() {
   const { user } = useAuth();
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground selection:bg-rose-500/20">
-      {/* Navigation Bar */}
-      <header className="sticky top-0 z-40 w-full border-b border-border/60 bg-background/80 backdrop-blur-md">
-        <div className="container mx-auto max-w-6xl flex h-16 items-center justify-between px-4 sm:px-6">
-          <BrandLogo size="md" href="/" />
-
-          <div className="flex items-center gap-3">
-            <ThemeToggle />
-            {user ? (
-              <Link href="/chat">
-                <Button size="sm" className="rounded-xl text-xs font-medium shadow-xs bg-gradient-to-tr from-[#702C45] to-[#C96B83] text-white">
-                  Open Chat
-                </Button>
-              </Link>
-            ) : (
-              <>
-                <Link href="/login">
-                  <Button variant="ghost" size="sm" className="rounded-xl text-xs">
-                    Sign In
-                  </Button>
-                </Link>
-                <Link href="/signup">
-                  <Button size="sm" className="rounded-xl text-xs font-medium shadow-xs bg-gradient-to-tr from-[#702C45] to-[#C96B83] text-white">
-                    Get Started
-                  </Button>
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
+      {/* Shared Navigation Bar */}
+      <PublicHeader />
 
       {/* Hero Section */}
       <main className="flex-1">
@@ -200,7 +172,7 @@ export default function LandingPage() {
         </section>
 
         {/* Features Grid */}
-        <section className="py-16 sm:py-24 border-t border-border/60 bg-muted/20">
+        <section id="features" className="py-16 sm:py-24 border-t border-border/60 bg-muted/20">
           <div className="container mx-auto max-w-6xl px-4 sm:px-6">
             <div className="text-center max-w-2xl mx-auto mb-14 space-y-3">
               <h2 className="text-3xl sm:text-4xl font-serif font-bold tracking-tight text-foreground">
@@ -282,18 +254,8 @@ export default function LandingPage() {
         </section>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-border/60 py-8 bg-card/40">
-        <div className="container mx-auto max-w-6xl px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
-          <BrandLogo size="sm" href="/" />
-          <p className="font-serif italic">
-            &quot;A little closer, even when we&apos;re apart.&quot;
-          </p>
-          <p className="text-[11px] font-sans">
-            © {new Date().getFullYear()} DuoChat. Made with love for couples.
-          </p>
-        </div>
-      </footer>
+      {/* Shared Professional Footer */}
+      <PublicFooter />
     </div>
   );
 }
